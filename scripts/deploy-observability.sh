@@ -1,6 +1,6 @@
 #!/bin/bash
-# Copyright (c) 2026 Ibn Abbas
-# SPDX-License-Identifier: MIT
+# Copyright 2026 Ibn Abbas
+# SPDX-License-Identifier: Apache-2.0
 # Deploy Prometheus + Loki observability stack to monitoring namespace
 # Run this on the OKE jumpbox (has direct kubectl access)
 set -e

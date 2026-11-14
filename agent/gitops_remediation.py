@@ -1,5 +1,5 @@
-# Copyright (c) 2026 Ibn Abbas
-# SPDX-License-Identifier: MIT
+# Copyright 2026 Ibn Abbas
+# SPDX-License-Identifier: Apache-2.0
 """
 GitOps-first remediation for Helm-owned drift (roadmap P2 item 8).
 

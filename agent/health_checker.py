@@ -1,5 +1,5 @@
-# Copyright (c) 2026 Ibn Abbas
-# SPDX-License-Identifier: MIT
+# Copyright 2026 Ibn Abbas
+# SPDX-License-Identifier: Apache-2.0
 """
 Discovers and evaluates the health of Kubernetes Deployments / Services / Ingresses
 in the configured stage namespace(s).

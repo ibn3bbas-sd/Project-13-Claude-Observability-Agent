@@ -1,5 +1,5 @@
-# Copyright (c) 2026 Ibn Abbas
-# SPDX-License-Identifier: MIT
+# Copyright 2026 Ibn Abbas
+# SPDX-License-Identifier: Apache-2.0
 """
 Cheap deterministic pre-pass — Grafana Sift-style fixed checklist run over data
 already collected for this incident (health_report + context). Zero new API

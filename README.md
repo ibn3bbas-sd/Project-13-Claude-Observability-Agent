@@ -234,4 +234,4 @@ To avoid repeated Teams messages for persistent issues, add a Redis or Kubernete
 
 ## License
 
-Copyright (c) 2026 Ibn Abbas. Released under the [MIT License](LICENSE).
+Copyright 2026 Ibn Abbas. Licensed under the [Apache License, Version 2.0](LICENSE); see [NOTICE](NOTICE).

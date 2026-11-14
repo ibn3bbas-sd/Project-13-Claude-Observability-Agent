@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """
 Sends Kubernetes context to Claude's API and parses structured analysis.
 

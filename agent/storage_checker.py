@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """
 Storage health checks for a workload's pods — PersistentVolumeClaims and the
 StorageClasses behind them.

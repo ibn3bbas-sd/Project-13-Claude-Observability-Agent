@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """
 Minimal outcome store — persists remediation outcomes (service, hypothesis,
 command, resolved, time-to-resolve) to a ConfigMap so future incidents on the

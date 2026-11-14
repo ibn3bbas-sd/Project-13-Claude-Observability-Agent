@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """
 Configuration — loaded entirely from environment variables.
 No secrets are ever logged.

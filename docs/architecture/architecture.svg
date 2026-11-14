@@ -7,7 +7,7 @@
 <text x="48" y="52" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="30" font-weight="700" fill="#1f2328" text-anchor="start">Claude Observability Agent — High-Level Design (HLD)</text>
 <text x="48" y="78" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="15.5" font-weight="400" fill="#57606a" text-anchor="start">AI-assisted SRE for Oracle Kubernetes Engine · CronJob every 5 min · detect → collect → pre-pass → Claude tool-use analysis → Teams approval → remediate · a human approves every mutation</text>
 <text x="1880" y="52" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#8c959f" text-anchor="end">FHD 1920 × 1080</text>
-<text x="1880" y="74" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="400" fill="#8c959f" text-anchor="end">v1 · theme-aware</text>
+<text x="1880" y="74" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="400" fill="#8c959f" text-anchor="end">v1 · theme-aware · © 2026 Ibn Abbas · MIT</text>
 <line x1="48" y1="96" x2="1880" y2="96" stroke="#d0d7de" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
 <rect x="320" y="340" width="1120" height="680" rx="14" ry="14" fill="#cf222e" fill-opacity="0.025" stroke="#cf222e" stroke-width="1.6" stroke-dasharray="8 6"/>
 <rect x="342" y="458" width="1076" height="548" rx="14" ry="14" fill="#bc4c00" fill-opacity="0.025" stroke="#bc4c00" stroke-width="1.6" stroke-dasharray="8 6"/>
@@ -338,7 +338,7 @@
 <text x="48" y="52" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="30" font-weight="700" fill="#e6edf3" text-anchor="start">Claude Observability Agent — High-Level Design (HLD)</text>
 <text x="48" y="78" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="15.5" font-weight="400" fill="#9198a1" text-anchor="start">AI-assisted SRE for Oracle Kubernetes Engine · CronJob every 5 min · detect → collect → pre-pass → Claude tool-use analysis → Teams approval → remediate · a human approves every mutation</text>
 <text x="1880" y="52" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#6e7681" text-anchor="end">FHD 1920 × 1080</text>
-<text x="1880" y="74" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="400" fill="#6e7681" text-anchor="end">v1 · theme-aware</text>
+<text x="1880" y="74" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="400" fill="#6e7681" text-anchor="end">v1 · theme-aware · © 2026 Ibn Abbas · MIT</text>
 <line x1="48" y1="96" x2="1880" y2="96" stroke="#30363d" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
 <rect x="320" y="340" width="1120" height="680" rx="14" ry="14" fill="#f85149" fill-opacity="0.025" stroke="#f85149" stroke-width="1.6" stroke-dasharray="8 6"/>
 <rect x="342" y="458" width="1076" height="548" rx="14" ry="14" fill="#f0883e" fill-opacity="0.025" stroke="#f0883e" stroke-width="1.6" stroke-dasharray="8 6"/>

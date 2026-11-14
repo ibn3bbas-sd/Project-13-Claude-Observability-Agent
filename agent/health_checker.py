@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """
 Discovers and evaluates the health of Kubernetes Deployments / Services / Ingresses
 in the configured stage namespace(s).

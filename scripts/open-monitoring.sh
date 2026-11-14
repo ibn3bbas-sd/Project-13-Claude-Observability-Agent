@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 # open-monitoring.sh
 #
 # Opens browser access to Grafana, Prometheus, and Loki via kubectl port-forward.

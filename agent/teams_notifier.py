@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """
 Formats and sends alert cards to a Microsoft Teams channel via Microsoft Graph API.
 Uses OAuth2 delegated flow (refresh_token grant) and Adaptive Card format.

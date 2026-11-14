@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """
 Thin HTTP clients for Prometheus, Loki, and Tempo — shared between
 ClaudeAnalyzer's on-demand investigation tools (agent/claude_analyzer.py) and

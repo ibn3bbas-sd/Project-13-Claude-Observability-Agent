@@ -1,3 +1,5 @@
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """
 Collects rich context for an unhealthy service:
   - Kubernetes events (always)

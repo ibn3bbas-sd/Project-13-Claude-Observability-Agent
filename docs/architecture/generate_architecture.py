@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Ibn Abbas
+# SPDX-License-Identifier: MIT
 """Generate docs/architecture/architecture.svg — the high-level design (HLD).
 
 Single self-contained SVG, FHD 1920x1080, theme-aware: a light and a dark copy
@@ -178,7 +180,7 @@ def draw(c: Canvas) -> None:
                    "pre-pass → Claude tool-use analysis → Teams approval → remediate · a human approves every mutation",
            15.5, 400, "muted")
     c.text(1880, 52, "FHD 1920 × 1080", 14, 600, "subtle", "end")
-    c.text(1880, 74, "v1 · theme-aware", 13.5, 400, "subtle", "end")
+    c.text(1880, 74, "v1 · theme-aware · © 2026 Ibn Abbas · MIT", 13.5, 400, "subtle", "end")
     c.line(48, 96, 1880, 96, "border", 1.5, op=0.9)
 
     # ── boundaries (drawn first so arrows and cards sit on top) ──────────────

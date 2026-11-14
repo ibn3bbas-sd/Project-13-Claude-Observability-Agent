@@ -1,0 +1,89 @@
+loki:
+  # Keep service name identical to old loki-stack so Grafana + Promtail URLs need no change
+  fullnameOverride: loki-stack
+
+  deploymentMode: SingleBinary
+
+  loki:
+    auth_enabled: false
+    commonConfig:
+      replication_factor: 1
+    storage:
+      type: filesystem
+    schemaConfig:
+      configs:
+        - from: "2024-01-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+    limits_config:
+      retention_period: 360h
+      ingestion_rate_mb: 8
+      ingestion_burst_size_mb: 16
+      max_entries_limit_per_query: 5000
+      volume_enabled: true
+    table_manager:
+      retention_deletes_enabled: true
+      retention_period: 360h
+    chunk_store_config:
+      max_look_back_period: 360h
+
+  singleBinary:
+    replicas: 1
+    persistence:
+      enabled: true
+      size: 50Gi
+
+  # Disable distributed-mode components
+  backend:
+    replicas: 0
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+
+  # Disable gateway (no auth needed in staging)
+  gateway:
+    enabled: false
+
+  # Disable Memcached caches (not needed for staging, images fail in private cluster)
+  chunksCache:
+    enabled: false
+  resultsCache:
+    enabled: false
+
+  # Disable Loki canary (creates a DaemonSet on every node)
+  lokiCanary:
+    enabled: false
+
+  # Disable rules-sync sidecar (adds kiwigrid/k8s-sidecar container — image fails in private cluster)
+  sidecar:
+    rules:
+      enabled: false
+
+  # Disable self-monitoring stack (we use our own Prometheus)
+  monitoring:
+    selfMonitoring:
+      enabled: false
+      grafanaAgent:
+        installOperator: false
+    serviceMonitor:
+      enabled: false
+    lokiCanary:
+      enabled: false
+    dashboards:
+      enabled: false
+    rules:
+      enabled: false
+      alerting: false
+
+  test:
+    enabled: false
+
+promtail:
+  config:
+    clients:
+      - url: http://loki-stack.observability:3100/loki/api/v1/push

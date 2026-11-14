@@ -1,0 +1,67 @@
+# =============================================================================
+#  Prometheus query (read-only)
+#
+#  Runs PromQL against the in-cluster Prometheus from stg-runners, which resolves
+#  cluster DNS — so no port-forward and no jumpbox copy-paste.
+#
+#  Exists because several dashboards in this repo were empty for reasons that all
+#  needed the same two facts: does the metric exist, and what labels does it carry.
+#  Guessing cost multiple round trips on the cluster-summary dashboard (id="/",
+#  kubernetes_io_hostname) and the NGINX one (a CounterVec with no series until
+#  traffic). `labels: yes` prints a sample series so a dashboard's selectors can be
+#  checked against reality instead of assumed.
+#
+#  Queries are semicolon-separated. Read-only: it only calls the query API.
+# =============================================================================
+
+name: Prometheus query
+
+on:
+  workflow_dispatch:
+    inputs:
+      queries:
+        description: "Semicolon-separated PromQL. Example: count(pg_up); pg_up"
+        required: true
+        default: "count(up); count(pg_up)"
+      labels:
+        description: "Print the labels of a sample series for each query (yes/no)"
+        required: false
+        default: "yes"
+      target:
+        description: "Which Prometheus: prom-stack | rancher"
+        required: false
+        default: "prom-stack"
+
+jobs:
+  query:
+    name: promql
+    runs-on: stg-runners
+    steps:
+      - name: Resolve Prometheus URL
+        id: prom
+        run: |
+          if [ "${{ inputs.target }}" = "rancher" ]; then
+            URL="http://rancher-monitoring-prometheus.cattle-monitoring-system:9090"
+          else
+            URL="http://prom-stack-kube-prometheus-prometheus.observability:9090"
+          fi
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "Querying $URL"
+
+      - name: Run queries
+        env:
+          PROM: ${{ steps.prom.outputs.url }}
+          SHOW_LABELS: ${{ inputs.labels }}
+        run: |
+          echo "${{ inputs.queries }}" | tr ';' '\n' | while IFS= read -r q; do
+            q="$(echo "$q" | sed 's/^ *//; s/ *$//')"
+            [ -z "$q" ] && continue
+            echo "::group::$q"
+            curl -sfG --max-time 20 "$PROM/api/v1/query" --data-urlencode "query=$q" -o /tmp/r.json \
+              || { echo "  request failed"; echo "::endgroup::"; continue; }
+            python3 -c "import json; d=json.load(open('/tmp/r.json')); r=d.get('data',{}).get('result',[]); print('  status :', d.get('status')); print('  series :', len(r)); [print('  value  :', i['value'][1]) for i in r[:5]]" || echo "  unparseable response"
+            if [ "$SHOW_LABELS" = "yes" ]; then
+              python3 -c "import json; d=json.load(open('/tmp/r.json')); r=d.get('data',{}).get('result',[]); [print('  labels :', json.dumps(i.get('metric',{}), sort_keys=True)) for i in r[:3]]" || true
+            fi
+            echo "::endgroup::"
+          done

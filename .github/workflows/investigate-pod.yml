@@ -1,0 +1,176 @@
+name: Investigate Pod
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: 'Namespace'
+        required: true
+        default: 'public-apps'
+      pod_name:
+        description: 'Pod name (exact pod name or StatefulSet pod e.g. redis-redis-cluster-0)'
+        required: true
+        default: 'redis-redis-cluster-0'
+      log_lines:
+        description: 'Tail lines from kubectl logs'
+        required: false
+        default: '200'
+      loki_hours:
+        description: 'How many hours back to query Loki'
+        required: false
+        default: '2'
+
+jobs:
+  investigate:
+    name: Investigate ${{ inputs.namespace }}/${{ inputs.pod_name }}
+    runs-on: stg-runners
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.2
+
+      - name: Pod status
+        run: |
+          NS="${{ inputs.namespace }}"
+          POD="${{ inputs.pod_name }}"
+
+          echo "::group::Pod list"
+          kubectl get pods -n "$NS" | grep "$POD" || true
+          echo "::endgroup::"
+
+          echo "::group::Pod describe"
+          kubectl describe pod "$POD" -n "$NS" 2>/dev/null || \
+            kubectl describe pods -n "$NS" -l "statefulset.kubernetes.io/pod-name=$POD" 2>/dev/null || \
+            echo "Pod not found by exact name"
+          echo "::endgroup::"
+
+          echo "::group::StatefulSet status"
+          STS=$(echo "$POD" | sed 's/-[0-9]*$//')
+          kubectl describe statefulset "$STS" -n "$NS" 2>/dev/null || true
+          echo "::endgroup::"
+
+          echo "::group::Deployment status"
+          # Derive app name: strip pod-template-hash and pod suffix (last two -xxx segments for Deployment pods)
+          APP=$(echo "$POD" | sed 's/-[a-z0-9]\{9,10\}-[a-z0-9]\{5\}$//' 2>/dev/null || echo "$POD" | sed 's/-[0-9]*$//')
+          kubectl describe deployment "$APP" -n "$NS" 2>/dev/null || true
+          echo "::endgroup::"
+
+          echo "::group::PVC status"
+          kubectl get pvc -n "$NS" | grep "$APP" || echo "No PVCs matching $APP"
+          echo "::endgroup::"
+
+      - name: Events — pod + related resources
+        run: |
+          NS="${{ inputs.namespace }}"
+          POD="${{ inputs.pod_name }}"
+          # App prefix: strip trailing pod-template-hash+name or StatefulSet index
+          APP=$(echo "$POD" | sed 's/-[a-z0-9]\{9,10\}-[a-z0-9]\{5\}$//' | sed 's/-[0-9]*$//')
+
+          echo "::group::Events for exact pod"
+          kubectl get events -n "$NS" --field-selector "involvedObject.name=$POD" \
+            --sort-by='.lastTimestamp' 2>/dev/null | tail -40 || true
+          echo "::endgroup::"
+
+          echo "::group::Events for Deployment/$APP"
+          kubectl get events -n "$NS" --field-selector "involvedObject.name=$APP,involvedObject.kind=Deployment" \
+            --sort-by='.lastTimestamp' 2>/dev/null | tail -20 || true
+          echo "::endgroup::"
+
+          echo "::group::Events for ReplicaSets matching $APP"
+          for RS in $(kubectl get rs -n "$NS" --no-headers 2>/dev/null | awk '{print $1}' | grep "^$APP-"); do
+            echo "--- ReplicaSet: $RS ---"
+            kubectl get events -n "$NS" --field-selector "involvedObject.name=$RS" \
+              --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
+          done
+          echo "::endgroup::"
+
+          echo "::group::Events for PVCs matching $APP"
+          for PVC in $(kubectl get pvc -n "$NS" --no-headers 2>/dev/null | awk '{print $1}' | grep "$APP"); do
+            echo "--- PVC: $PVC ---"
+            kubectl get events -n "$NS" --field-selector "involvedObject.name=$PVC" \
+              --sort-by='.lastTimestamp' 2>/dev/null | tail -10 || true
+          done
+          echo "::endgroup::"
+
+          echo "::group::All namespace events mentioning $APP (last 50)"
+          kubectl get events -n "$NS" --sort-by='.lastTimestamp' 2>/dev/null | \
+            grep -i "$APP" | tail -50 || true
+          echo "::endgroup::"
+
+      - name: kubectl logs
+        run: |
+          NS="${{ inputs.namespace }}"
+          POD="${{ inputs.pod_name }}"
+
+          echo "::group::Current container logs (tail ${{ inputs.log_lines }})"
+          kubectl logs "$POD" -n "$NS" \
+            --tail=${{ inputs.log_lines }} --all-containers 2>/dev/null || \
+            echo "Pod not running — trying previous container logs:"
+          echo "::endgroup::"
+
+          echo "::group::Previous container logs (tail ${{ inputs.log_lines }})"
+          kubectl logs "$POD" -n "$NS" \
+            --tail=${{ inputs.log_lines }} --all-containers --previous 2>/dev/null || \
+            echo "No previous container logs available"
+          echo "::endgroup::"
+
+      - name: Loki query
+        run: |
+          kubectl port-forward svc/loki-stack 3100:3100 -n observability &
+          PF_PID=$!
+          sleep 5
+
+          NOW_NS=$(date +%s%N)
+          HOURS=${{ inputs.loki_hours }}
+          START_NS=$(( NOW_NS - HOURS * 3600 * 1000000000 ))
+
+          NS="${{ inputs.namespace }}"
+          POD="${{ inputs.pod_name }}"
+          APP=$(echo "$POD" | sed 's/-[a-z0-9]\{9,10\}-[a-z0-9]\{5\}$//' | sed 's/-[0-9]*$//')
+
+          echo "::group::Loki logs — pod label query (last ${HOURS}h)"
+          curl -s -G "http://localhost:3100/loki/api/v1/query_range" \
+            --data-urlencode "query={namespace=\"${NS}\",pod=~\"${POD}.*\"}" \
+            --data-urlencode "start=${START_NS}" \
+            --data-urlencode "end=${NOW_NS}" \
+            --data-urlencode "limit=500" \
+            --data-urlencode "direction=forward" | \
+            python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          results = data.get('data', {}).get('result', [])
+          if not results:
+              print('No Loki results for pod label.')
+              sys.exit(0)
+          for stream in results:
+              labels = stream.get('stream', {})
+              pod_lbl = labels.get('pod', labels.get('container', '?'))
+              for ts, line in stream.get('values', []):
+                  print(f'[{pod_lbl}] {line}')
+          " 2>/dev/null || echo "Loki query failed"
+          echo "::endgroup::"
+
+          echo "::group::Loki logs — app name fallback (last ${HOURS}h)"
+          curl -s -G "http://localhost:3100/loki/api/v1/query_range" \
+            --data-urlencode "query={namespace=\"${NS}\",pod=~\"${APP}.*\"}" \
+            --data-urlencode "start=${START_NS}" \
+            --data-urlencode "end=${NOW_NS}" \
+            --data-urlencode "limit=300" \
+            --data-urlencode "direction=forward" | \
+            python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          results = data.get('data', {}).get('result', [])
+          if not results:
+              print('No results for app prefix label.')
+              sys.exit(0)
+          for stream in results:
+              labels = stream.get('stream', {})
+              pod_lbl = labels.get('pod', labels.get('container', '?'))
+              for ts, line in stream.get('values', []):
+                  print(f'[{pod_lbl}] {line}')
+          " 2>/dev/null || true
+          echo "::endgroup::"
+
+          kill $PF_PID 2>/dev/null || true

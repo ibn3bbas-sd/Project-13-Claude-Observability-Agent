@@ -1,0 +1,20 @@
+apiVersion: v2
+name: monitoring-prometheus
+description: Prometheus + kube-state-metrics for staging (wraps kube-prometheus-stack)
+type: application
+version: 0.1.0
+appVersion: "latest"
+dependencies:
+  - name: kube-prometheus-stack
+    # PINNED — do not loosen this back to a range.
+    # ">=58.0.0" resolved to whatever was newest on the day of each run, so a
+    # `helm upgrade` could reshape the entire metrics stack with no commit here.
+    # The same unpinned range on the grafana subchart caused a failed upgrade on
+    # 2026-08-03 (env[3] valueFrom/value conflict on a live Deployment).
+    # 87.3.0 is what is actually installed — read from the chart label on
+    # observability/prom-stack-kube-prometheus-kubelet.
+    # Riskier here than for Grafana: this release owns the Prometheus StatefulSet,
+    # which has a documented OOM/WAL-replay history (see the 2h startup probe in
+    # values/stg-values.yaml).
+    version: "87.3.0"
+    repository: https://prometheus-community.github.io/helm-charts

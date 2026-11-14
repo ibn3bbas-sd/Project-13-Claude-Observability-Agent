@@ -1,0 +1,29 @@
+grafana:
+  ingress:
+    enabled: true
+    ingressClassName: ingress-nginx
+    hosts:
+      - grafana-stg.example.com
+    path: /
+    pathType: Prefix
+
+  # Admin credentials come from an existing Secret (never commit a plaintext password).
+  # Create it once before deploying:
+  #   kubectl create secret generic grafana-admin -n observability \
+  #     --from-literal=admin-user=admin --from-literal=admin-password='<grafana-admin-password>'
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  persistence:
+    enabled: true
+    size: 2Gi
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

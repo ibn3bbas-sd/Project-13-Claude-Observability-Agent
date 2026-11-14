@@ -1,0 +1,126 @@
+name: Diagnose claude-agent (monitoring ns)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_test_alert:
+        description: "Send a synthetic TEST_ALERT Teams message — verifies the full notification pipeline without touching real services. (yes/no)"
+        required: false
+        default: "no"
+      apply_rbac:
+        description: "Apply k8s/rbac.yaml to the cluster (Role, RoleBinding, ClusterRole, ClusterRoleBinding). Safe to re-run. (yes/no)"
+        required: false
+        default: "no"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  diagnose:
+    name: Diagnose claude-agent (monitoring)
+    runs-on: stg-runners
+    steps:
+      - name: Checkout app code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.2
+
+      - name: Diagnose — claude-agent
+        run: |
+          echo "::group::CronJob and recent Jobs"
+          kubectl -n monitoring get cronjob claude-agent -o wide 2>/dev/null || echo "CronJob not found"
+          kubectl -n monitoring get jobs -l app=claude-agent --sort-by=.metadata.creationTimestamp 2>/dev/null | tail -10
+          echo "::endgroup::"
+
+          echo "::group::Last failed pod logs (full)"
+          FAILED=$(kubectl -n monitoring get pods -l app=claude-agent \
+            --field-selector=status.phase=Failed \
+            --sort-by=.metadata.creationTimestamp -o name 2>/dev/null | tail -1)
+          if [[ -z "$FAILED" ]]; then
+            FAILED=$(kubectl -n monitoring get pods | grep "claude-agent" | grep "Error" | awk '{print $1}' | tail -1)
+            FAILED="pod/$FAILED"
+          fi
+          echo "Pod: $FAILED"
+          if [[ -n "$FAILED" && "$FAILED" != "pod/" ]]; then
+            kubectl -n monitoring logs $FAILED --tail=100 2>&1 || echo "No logs"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Pod describe (last failed)"
+          if [[ -n "$FAILED" && "$FAILED" != "pod/" ]]; then
+            kubectl -n monitoring describe $FAILED | tail -30
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Secrets present"
+          kubectl -n monitoring get secret claude-agent-secrets -o jsonpath='{.data}' 2>/dev/null \
+            | python3 -c "import json,sys; d=json.load(sys.stdin); [print(k, '= SET' if v else 'MISSING') for k,v in d.items()]" \
+            || echo "Secret not found"
+          echo "::endgroup::"
+
+          echo "::group::ServiceAccount and RBAC"
+          kubectl -n monitoring get serviceaccount claude-agent 2>/dev/null || echo "SA not found"
+          kubectl get clusterrolebinding -o wide 2>/dev/null | grep claude-agent || echo "No ClusterRoleBinding"
+          echo "::endgroup::"
+
+      - name: Test — send synthetic Teams alert (TEST_ALERT mode)
+        if: inputs.run_test_alert == 'yes'
+        run: |
+          echo "::group::Current claude-agent image"
+          IMAGE=$(kubectl -n monitoring get cronjob claude-agent \
+            -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}' 2>/dev/null || echo "")
+          echo "Image: $IMAGE"
+          echo "::endgroup::"
+
+          if [[ -z "$IMAGE" ]]; then
+            echo "::error::CronJob claude-agent not found — run Build & Deploy first"
+            exit 1
+          fi
+
+          echo "::group::Create test Job"
+          kubectl -n monitoring delete job claude-agent-test-alert --ignore-not-found
+          sed "s|registry.example.com/platform/claude-agent:IMAGE_TAG_PLACEHOLDER|${IMAGE}|g" \
+            k8s/claude-agent-test-job.yaml | kubectl apply -f -
+          echo "::endgroup::"
+
+          echo "::group::Wait for Job to complete (max 3 min)"
+          kubectl -n monitoring wait job/claude-agent-test-alert \
+            --for=condition=complete --timeout=180s 2>/dev/null || \
+          kubectl -n monitoring wait job/claude-agent-test-alert \
+            --for=condition=failed --timeout=10s 2>/dev/null || true
+          echo "::endgroup::"
+
+          echo "::group::Job and pod status"
+          kubectl -n monitoring get job claude-agent-test-alert -o wide
+          kubectl -n monitoring get pods -l app=claude-agent -o wide | grep test-alert || true
+          echo "::endgroup::"
+
+          echo "::group::Test agent logs (full)"
+          POD=$(kubectl -n monitoring get pods -l app=claude-agent \
+            --sort-by=.metadata.creationTimestamp -o name 2>/dev/null | \
+            xargs -I{} sh -c "kubectl -n monitoring get {} -o jsonpath='{.metadata.name}' 2>/dev/null" | \
+            grep "test-alert" | tail -1)
+          if [[ -z "$POD" ]]; then
+            POD=$(kubectl -n monitoring get pods | grep "claude-agent-test" | awk '{print $1}' | tail -1)
+          fi
+          echo "Pod: $POD"
+          if [[ -n "$POD" ]]; then
+            kubectl -n monitoring logs "$POD" 2>&1 || echo "No logs yet"
+          fi
+          echo "::endgroup::"
+
+      - name: Fix — apply k8s/rbac.yaml (ServiceAccount, Role, ClusterRole, bindings)
+        if: inputs.apply_rbac == 'yes'
+        run: |
+          echo "::group::Applying k8s/rbac.yaml"
+          kubectl apply -f k8s/rbac.yaml
+          echo "::endgroup::"
+          echo "::group::Verify claude-agent ServiceAccount and bindings"
+          kubectl -n monitoring get serviceaccount claude-agent
+          kubectl get clusterrole claude-agent -o yaml | grep -A5 "rules:"
+          kubectl -n monitoring get role claude-agent-secret-writer -o yaml | grep -A10 "rules:" || echo "Role not found"
+          kubectl -n monitoring get rolebinding claude-agent-secret-writer || echo "RoleBinding not found"
+          echo "::endgroup::"

@@ -1,0 +1,50 @@
+---
+# One-time bootstrap: grants ci-deployer the cluster-scope permissions
+# required by kube-prometheus-stack (ClusterRoles, CRDs, webhook configs).
+#
+# Apply from the bastion ONCE before running deploy-observability workflow:
+#   kubectl apply -f k8s/ci-deployer-cluster-rbac.yaml
+#
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ci-deployer-observability
+rules:
+  # kube-prometheus-stack creates ClusterRoles/ClusterRoleBindings
+  # for prometheus, kube-state-metrics, and node-exporter
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources: ["clusterroles", "clusterrolebindings"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Prometheus Operator installs CRDs on first deploy
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Prometheus Operator optionally manages admission webhooks
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["validatingwebhookconfigurations", "mutatingwebhookconfigurations"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # PersistentVolumes are cluster-scoped (Prometheus + Loki storage)
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # node-exporter needs to read node metadata
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/metrics"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ci-deployer-observability
+subjects:
+  - kind: ServiceAccount
+    name: ci-deployer
+    namespace: actions-runner-system
+roleRef:
+  kind: ClusterRole
+  name: ci-deployer-observability
+  apiGroup: rbac.authorization.k8s.io

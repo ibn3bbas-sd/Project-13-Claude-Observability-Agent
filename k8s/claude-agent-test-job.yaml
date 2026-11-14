@@ -1,0 +1,99 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: claude-agent-test-alert
+  namespace: monitoring
+  labels:
+    app: claude-agent
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: claude-agent
+    spec:
+      serviceAccountName: claude-agent
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: registry-pull-secret
+      containers:
+        - name: claude-agent
+          image: registry.example.com/platform/claude-agent:IMAGE_TAG_PLACEHOLDER
+          imagePullPolicy: Always
+          env:
+            - name: NAMESPACES
+              value: "apps-stg,observability,monitoring"
+            - name: STAGE_LABEL_SELECTOR
+              value: ""
+            - name: USE_IN_CLUSTER
+              value: "true"
+            - name: RUN_ONCE
+              value: "true"
+            - name: TEST_ALERT
+              value: "true"
+            - name: CLAUDE_MODEL
+              value: "claude-sonnet-4-6"
+            - name: CLAUDE_MAX_TOKENS
+              value: "4096"
+            - name: TEAMS_REPLY_TIMEOUT
+              value: "120"
+            - name: TEAMS_POLL_INTERVAL
+              value: "10"
+            - name: PROMETHEUS_URL
+              value: "http://prom-stack-kube-prometheus-prometheus.monitoring:9090"
+            - name: LOKI_URL
+              value: "http://loki-stack.monitoring:3100"
+            - name: LOKI_LOOKBACK_HOURS
+              value: "1"
+            - name: LOKI_MAX_LINES
+              value: "200"
+            - name: TEMPO_URL
+              value: "http://tempo.monitoring:3200"
+            - name: MAX_LOG_LINES
+              value: "100"
+            - name: MAX_EVENTS
+              value: "20"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: MS_GRAPH_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_TENANT_ID
+            - name: MS_GRAPH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_CLIENT_ID
+            - name: MS_GRAPH_REFRESH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_REFRESH_TOKEN
+            - name: MS_GRAPH_TEAM_ID
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_TEAM_ID
+            - name: MS_GRAPH_CHANNEL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_CHANNEL_ID
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]

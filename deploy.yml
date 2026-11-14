@@ -1,0 +1,294 @@
+# =============================================================================
+#  Build & Deploy — claude-observability-agent
+#
+#  Builds the Python monitoring container, pushes to OCIR, then deploys the
+#  CronJob manifest to the `monitoring` namespace on the OKE cluster.
+#
+#  Cluster access:
+#    The OKE cluster has a private endpoint only. Each deploy job replicates
+#    what the oke-jumpbox.sh bastion helper does locally:
+#      1. Create an OCI Bastion port-forwarding session targeting the jumpbox
+#      2. Open an SSH tunnel  localhost:6443 → jumpbox:6443
+#      3. Patch the kubeconfig server URL to https://127.0.0.1:6443
+#      4. Run kubectl through the tunnel, then tear it down
+#
+#  Required repo secrets:
+#    OCIR_HOST              – registry host              e.g. iad.ocir.io
+#    OCIR_NAMESPACE         – OCI object-storage namespace (tenancy namespace)
+#    OCIR_USERNAME          – <tenancy-namespace>/<oci-username>
+#    OCIR_TOKEN             – OCI auth token (not your OCI password)
+#    OCI_CLI_USER           – user OCID       ocid1.user.oc1..
+#    OCI_CLI_TENANCY        – tenancy OCID    ocid1.tenancy.oc1..
+#    OCI_CLI_FINGERPRINT    – API key fingerprint  aa:bb:cc:..
+#    OCI_CLI_KEY_CONTENT    – PEM private key  (-----BEGIN RSA PRIVATE KEY-----)
+#    OCI_CLI_REGION         – region identifier  e.g. us-ashburn-1
+#    OKE_CLUSTER_ID         – cluster OCID    ocid1.cluster.oc1..
+#    BASTION_SSH_KEY     – private key content of bastion_key (PEM)
+#    BASTION_SSH_KEY_PUB – public key content  of bastion_key
+#
+#  Note: k8s/secret.yaml (ANTHROPIC_API_KEY, MS_GRAPH_*) must already exist
+#  in the cluster. This workflow never applies that file so live values are
+#  never overwritten.
+# =============================================================================
+
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'CLAUDE.md'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag override (default: main-<short-sha>)'
+        required: false
+        default: ''
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  # Bastion / jumpbox resource identifiers (non-sensitive — same values as the oke-jumpbox.sh bastion helper)
+  BASTION_OCID: ocid1.bastion.oc1.us-ashburn-1.aaaaaaaaexamplebastion
+  JUMPBOX_OCID: ocid1.instance.oc1.us-ashburn-1.aaaaaaaaexampleinstance
+  JUMPBOX_USERNAME: opc
+  JUMPBOX_IP: 10.0.1.11
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # 1. Build the Docker image and push it to OCIR
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build & push image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.tag.outputs.image }}
+      tag: ${{ steps.tag.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            TAG="${{ inputs.image_tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}-${GITHUB_SHA:0:7}"
+          fi
+          TAG=$(echo "$TAG" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+          IMAGE="${{ secrets.OCIR_HOST }}/${{ secrets.OCIR_NAMESPACE }}/oke-health-monitor:${TAG}"
+          echo "tag=${TAG}"     >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Building: ${IMAGE}"
+
+      - name: Login to OCIR
+        run: |
+          echo "${{ secrets.OCIR_TOKEN }}" | \
+            docker login "${{ secrets.OCIR_HOST }}" \
+              -u "${{ secrets.OCIR_USERNAME }}" \
+              --password-stdin
+
+      - name: Build and push
+        run: |
+          IMAGE="${{ steps.tag.outputs.image }}"
+          LATEST="${{ secrets.OCIR_HOST }}/${{ secrets.OCIR_NAMESPACE }}/oke-health-monitor:latest"
+          docker build -t "$IMAGE" -t "$LATEST" .
+          docker push "$IMAGE"
+          docker push "$LATEST"
+
+  # ---------------------------------------------------------------------------
+  # 2. Deploy to OKE via OCI Bastion tunnel  (mirrors the oke-jumpbox.sh bastion helper logic)
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to OKE (monitoring namespace)
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.0
+
+      - name: Install OCI CLI
+        run: pip3 install oci-cli --break-system-packages --quiet
+
+      - name: Configure OCI CLI
+        run: |
+          mkdir -p ~/.oci
+          printf '%s' "${{ secrets.OCI_CLI_KEY_CONTENT }}" > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+          cat > ~/.oci/config << 'OCIEOF'
+          [DEFAULT]
+          user=${{ secrets.OCI_CLI_USER }}
+          fingerprint=${{ secrets.OCI_CLI_FINGERPRINT }}
+          tenancy=${{ secrets.OCI_CLI_TENANCY }}
+          region=${{ secrets.OCI_CLI_REGION }}
+          key_file=/home/runner/.oci/key.pem
+          OCIEOF
+          chmod 600 ~/.oci/config
+
+      - name: Write jumpbox SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "${{ secrets.BASTION_SSH_KEY }}"     > ~/.ssh/bastion_key
+          printf '%s' "${{ secrets.BASTION_SSH_KEY_PUB }}" > ~/.ssh/bastion_key.pub
+          chmod 600 ~/.ssh/bastion_key
+          chmod 644 ~/.ssh/bastion_key.pub
+
+      # -----------------------------------------------------------------------
+      # Create an OCI Bastion port-forwarding session targeting the jumpbox.
+      # Replicates the create_session() + wait_for_active_session() logic from
+      # the oke-jumpbox.sh bastion helper.  Session TTL is 30 min — enough for any deploy run.
+      # -----------------------------------------------------------------------
+      - name: Create Bastion session and wait for ACTIVE
+        id: bastion
+        run: |
+          SESSION_ID=$(oci bastion session create-port-forwarding \
+            --bastion-id  "$BASTION_OCID" \
+            --target-resource-id "$JUMPBOX_OCID" \
+            --target-port 22 \
+            --ssh-public-key-file ~/.ssh/bastion_key.pub \
+            --session-ttl 1800 \
+            --query 'data.id' --raw-output)
+
+          echo "Created session: ${SESSION_ID}"
+          echo "session_id=${SESSION_ID}" >> "$GITHUB_OUTPUT"
+
+          # Poll up to 150 s (30 × 5 s) — same as MAX_SESSION_RETRIES in the script
+          BASTION_HOST=""
+          for i in $(seq 1 30); do
+            STATE=$(oci bastion session get \
+              --session-id "$SESSION_ID" \
+              --query 'data."lifecycle-state"' --raw-output)
+
+            if [ "$STATE" = "ACTIVE" ]; then
+              BASTION_HOST=$(oci bastion session get \
+                --session-id "$SESSION_ID" --output json \
+                | jq -r '.data."ssh-metadata".command' \
+                | awk -F@ '{print $2}' | awk '{print $1}')
+              echo "Session ACTIVE — bastion host: ${BASTION_HOST}"
+              echo "bastion_host=${BASTION_HOST}" >> "$GITHUB_OUTPUT"
+              break
+            fi
+
+            case "$STATE" in
+              FAILED|DELETING|DELETED)
+                echo "::error::Session entered terminal state: ${STATE}"
+                exit 1 ;;
+            esac
+
+            echo "State: ${STATE} (${i}/30) — retrying in 5 s..."
+            sleep 5
+          done
+
+          if [ -z "$BASTION_HOST" ]; then
+            echo "::error::Timed out waiting for Bastion session to become ACTIVE"
+            exit 1
+          fi
+
+      # -----------------------------------------------------------------------
+      # Open SSH tunnel:  localhost:6443  →  jumpbox:localhost:6443
+      # Exact equivalent of the oke-jumpbox.sh bastion helper connect_ssh() with --port-forward 6443:6443
+      # -----------------------------------------------------------------------
+      - name: Open SSH tunnel  localhost:6443 → jumpbox:6443
+        run: |
+          SESSION_ID="${{ steps.bastion.outputs.session_id }}"
+          BASTION_HOST="${{ steps.bastion.outputs.bastion_host }}"
+
+          ssh -i ~/.ssh/bastion_key \
+            -o ProxyCommand="ssh -i ~/.ssh/bastion_key -W %h:%p -p 22 ${SESSION_ID}@${BASTION_HOST}" \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=5 \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=20 \
+            -N -L 6443:localhost:6443 \
+            "${JUMPBOX_USERNAME}@${JUMPBOX_IP}" &
+
+          TUNNEL_PID=$!
+          echo "TUNNEL_PID=${TUNNEL_PID}" >> "$GITHUB_ENV"
+          echo "Tunnel started (PID ${TUNNEL_PID})"
+
+          # Wait up to 60 s for port 6443 to accept connections
+          for i in $(seq 1 12); do
+            if (echo > /dev/tcp/127.0.0.1/6443) 2>/dev/null; then
+              echo "Tunnel ready"
+              break
+            fi
+            if ! kill -0 $TUNNEL_PID 2>/dev/null; then
+              echo "::error::SSH tunnel process exited before port became ready"
+              exit 1
+            fi
+            echo "Waiting for tunnel... (${i}/12)"
+            sleep 5
+          done
+
+          if ! (echo > /dev/tcp/127.0.0.1/6443) 2>/dev/null; then
+            echo "::error::Port 6443 still not responding after 60 s — tunnel failed to establish"
+            kill "$TUNNEL_PID" 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Generate kubeconfig (private endpoint → localhost:6443)
+        run: |
+          mkdir -p ~/.kube
+          oci ce cluster create-kubeconfig \
+            --cluster-id "${{ secrets.OKE_CLUSTER_ID }}" \
+            --file ~/.kube/config \
+            --region "${{ secrets.OCI_CLI_REGION }}" \
+            --token-version 2.0.0 \
+            --kube-endpoint PRIVATE_ENDPOINT
+          chmod 600 ~/.kube/config
+
+          # Redirect server URL from the private endpoint IP to the local tunnel
+          CLUSTER_NAME=$(kubectl config view -o jsonpath='{.clusters[0].name}')
+          kubectl config set-cluster "$CLUSTER_NAME" \
+            --server=https://127.0.0.1:6443 \
+            --insecure-skip-tls-verify=true
+
+      - name: Verify cluster connectivity
+        run: kubectl cluster-info
+
+      - name: Ensure monitoring namespace exists
+        run: |
+          kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply RBAC (ServiceAccount + ClusterRole)
+        run: kubectl apply -f k8s/rbac.yaml
+
+      - name: Deploy CronJob with pinned image
+        run: |
+          IMAGE="${{ needs.build.outputs.image }}"
+          sed "s|image: .*oke-health-monitor.*|image: ${IMAGE}|" k8s/cronjob.yaml | \
+            kubectl apply -f -
+
+      - name: Verify CronJob
+        run: |
+          echo "::group::CronJob status"
+          kubectl get cronjob oke-health-monitor -n monitoring -o wide
+          echo "::endgroup::"
+          echo "::group::Recent pods"
+          kubectl get pods -n monitoring -l app=oke-health-monitor \
+            --sort-by=.metadata.creationTimestamp | tail -5
+          echo "::endgroup::"
+          echo "Tag deployed: ${{ needs.build.outputs.tag }}"
+
+      # Always clean up the tunnel, even if a step failed
+      - name: Teardown SSH tunnel
+        if: always()
+        run: |
+          if [ -n "${TUNNEL_PID:-}" ]; then
+            kill "$TUNNEL_PID" 2>/dev/null || true
+            echo "Tunnel (PID ${TUNNEL_PID}) stopped"
+          fi

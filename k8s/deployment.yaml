@@ -1,0 +1,94 @@
+---
+# REFERENCE ONLY — CI deploys via Helm (helm-charts/helmcharts/claude-agent/).
+# Use this Deployment if you prefer a long-running agent instead of the CronJob.
+# Set RUN_ONCE=false and INTERVAL_SECONDS accordingly. Replace the image tag before applying.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claude-agent
+  namespace: monitoring
+  labels:
+    app: claude-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: claude-agent
+  template:
+    metadata:
+      labels:
+        app: claude-agent
+    spec:
+      serviceAccountName: claude-agent
+      containers:
+        - name: claude-agent
+          image: registry.example.com/platform/claude-agent:v0.0.4
+          imagePullPolicy: Always
+          env:
+            - name: NAMESPACES
+              value: "apps-stg,observability,monitoring"
+            - name: STAGE_LABEL_SELECTOR
+              value: "environment=stage"
+            - name: USE_IN_CLUSTER
+              value: "true"
+            - name: RUN_ONCE
+              value: "false"
+            - name: INTERVAL_SECONDS
+              value: "300"
+            - name: CLAUDE_MODEL
+              value: "claude-sonnet-5"
+            - name: CLAUDE_MAX_TOKENS
+              value: "8192"
+            - name: TEAMS_REPLY_TIMEOUT
+              value: "120"
+            - name: TEAMS_POLL_INTERVAL
+              value: "10"
+            - name: MAX_LOG_LINES
+              value: "100"
+            - name: MAX_EVENTS
+              value: "20"
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: MS_GRAPH_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_TENANT_ID
+            - name: MS_GRAPH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_CLIENT_ID
+            - name: MS_GRAPH_REFRESH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_REFRESH_TOKEN
+            - name: MS_GRAPH_TEAM_ID
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_TEAM_ID
+            - name: MS_GRAPH_CHANNEL_ID
+              valueFrom:
+                secretKeyRef:
+                  name: claude-agent-secrets
+                  key: MS_GRAPH_CHANNEL_ID
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities:
+              drop: ["ALL"]
+      restartPolicy: Always

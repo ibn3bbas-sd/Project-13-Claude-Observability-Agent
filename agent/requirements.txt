@@ -1,0 +1,6 @@
+# >=0.105.2: output_config (structured outputs) on messages.create — the analyzer
+# relies on it to guarantee schema-valid JSON. 0.28 does not have it.
+anthropic>=0.105.2
+kubernetes>=29.0.0
+requests>=2.31.0
+PyYAML>=6.0

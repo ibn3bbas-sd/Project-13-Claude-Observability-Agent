@@ -1,0 +1,105 @@
+grafana:
+  # Stay on 11.x — Grafana 12 has breaking config changes that cause CrashLoopBackOff.
+  # Must be >= 11.6.11: every Logs Drilldown release (grafana-lokiexplore-app 2.1.5
+  # through 2.4.0) declares grafanaDependency ">=11.6.11-0 <12". On 11.6.0 the plugin
+  # installs and registers fine, but its module.js requests the shared module
+  # /react/jsx-runtime, which 11.6.0 does not expose to plugins — Grafana returns 404
+  # and the frontend renders "App not found" at /a/grafana-lokiexplore-app/explore.
+  # 11.6.16 is the newest 11.6 patch, so it also picks up 16 releases of fixes.
+  image:
+    tag: "11.6.16"
+
+  service:
+    type: ClusterIP
+
+  persistence:
+    enabled: false
+
+  # REQUIRED wherever persistence is enabled (see values/stg-values.yaml).
+  # The OCI block volume is ReadWriteOnce, and the default RollingUpdate strategy
+  # starts the new pod before terminating the old one — so the new pod can never
+  # attach the volume the old pod still holds:
+  #   Multi-Attach error for volume "csi-..." Volume is already used by pod(s) ...
+  # The rollout then deadlocks and `kubectl rollout status` fails with
+  # "timed out waiting for the condition", which is what broke every Deploy
+  # Observability Stack run since 2026-06-29 — and why the plugin config below
+  # (grafana-lokiexplore-app) never reached the running pod, leaving
+  # Drilldown -> Logs showing "App not found".
+  # Recreate terminates the old pod first, releasing the volume. Costs a few
+  # seconds of Grafana downtime per upgrade.
+  deploymentStrategy:
+    type: Recreate
+
+  # Pre-configure Prometheus and Loki as datasources
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          uid: PBFA97CFB590B2093
+          url: http://prom-stack-kube-prometheus-prometheus.observability:9090
+          access: proxy
+          isDefault: true
+        - name: Loki
+          type: loki
+          uid: loki
+          url: http://loki-stack.observability:3100
+          access: proxy
+        - name: Tempo
+          type: tempo
+          uid: tempo
+          url: http://tempo.observability:3200
+          access: proxy
+          jsonData:
+            tracesToLogsV2:
+              datasourceUid: loki
+            serviceMap:
+              datasourceUid: prometheus
+        - name: alertmanager
+          type: alertmanager
+          uid: alertmanager
+          url: http://prom-stack-kube-prometheus-alertmanager.observability:9093
+          access: proxy
+          jsonData:
+            implementation: prometheus
+
+  # Installs Logs Drilldown via grafana-cli (no version = latest from the registry).
+  # Leaving it unpinned is safe ONLY because the image above is >= 11.6.11 — see that
+  # comment. Every 2.x release needs >=11.6.11, so the previous note here claiming
+  # "2.1.5 is compatible with Grafana 11.6" was wrong: 2.1.5 has the same floor, and
+  # pinning the plugin would not have fixed the /react/jsx-runtime 404. The Grafana
+  # patch level was always the real constraint.
+  # metricsdrilldown must be listed too. The old note here said Grafana preinstalls it,
+  # but it does not: on 11.6 the settings API returned 404 for
+  # grafana-metricsdrilldown-app and /var/lib/grafana/plugins held only lokiexplore
+  # and pyroscope. Without it, Drilldown -> Metrics renders its welcome screen and the
+  # "Let's start!" button goes nowhere. Latest is 2.3.1, which needs >=11.6.11 — same
+  # floor as Logs Drilldown, so it is satisfied by the image pinned above.
+  # grafana-exploretraces-app (2.1.0, same floor) would add Traces Drilldown — not
+  # listed because nothing currently asks for it.
+  plugins:
+    - grafana-lokiexplore-app
+    - grafana-metricsdrilldown-app
+
+  grafana.ini:
+    "plugin.grafana-lokiexplore-app":
+      enabled: true
+    "plugin.grafana-exploretraces-app":
+      enabled: true
+    "plugin.grafana-metricsdrilldown-app":
+      enabled: true
+    feature_toggles:
+      preinstallAutoUpdate: "false"
+
+  # Default dashboards for Kubernetes overview
+  defaultDashboardsEnabled: true
+  defaultDashboardsTimezone: utc
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi

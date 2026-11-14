@@ -1,0 +1,42 @@
+---
+# Expose ingress-nginx controller metrics port (10254) as a named Service port.
+# Required because the stock ingress-nginx install has no metrics Service by default.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller-metrics
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller-metrics
+spec:
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+  ports:
+    - name: metrics
+      port: 10254
+      targetPort: 10254
+---
+# ServiceMonitor in observability namespace — picked up by our Prometheus CR
+# (serviceMonitorNamespaceSelector: observability).
+# Must carry release=prom-stack to match Prometheus CR serviceMonitorSelector.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ingress-nginx
+  namespace: observability
+  labels:
+    release: prom-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - ingress-nginx
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx
+      app.kubernetes.io/component: controller-metrics
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

@@ -1,0 +1,22 @@
+opentelemetry-collector:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  # Single replica is sufficient for staging
+  replicaCount: 1
+
+  # Expose OTLP HTTP (4318) publicly — apps outside the cluster send traces here
+  ingress:
+    enabled: true
+    ingressClassName: ingress-nginx
+    hosts:
+      - host: otel-stg.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+            port: 4318

@@ -1,0 +1,21 @@
+apiVersion: v2
+name: monitoring-grafana
+description: Grafana with Prometheus and Loki datasources pre-configured
+type: application
+version: 0.1.0
+appVersion: "latest"
+dependencies:
+  - name: grafana
+    # PINNED — do not loosen this back to a range.
+    # ">=7.0.0" resolved to whatever was latest on the day of each run, so the
+    # rendered Deployment changed shape without any commit here. On 2026-08-03 a
+    # newer chart templated container env differently from the live object
+    # (created by 10.5.15) and the upgrade failed:
+    #   Deployment.apps "monitoring-grafana" is invalid:
+    #   spec.template.spec.containers[0].env[3].valueFrom: Invalid value: "":
+    #   may not be specified when `value` is not empty
+    # 10.5.15 is the version that produced the last working release here, and the
+    # values.yaml notes below (Grafana 11.6.0 image, lokiexplore 2.1.5,
+    # preinstallAutoUpdate) were all tuned against it.
+    version: "10.5.15"
+    repository: https://grafana.github.io/helm-charts

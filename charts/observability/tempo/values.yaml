@@ -1,0 +1,51 @@
+# Ingress managed by wrapper chart template (not sub-chart)
+ingress:
+  enabled: false
+  ingressClassName: ""
+  annotations: {}
+  hosts: []
+
+tempo:
+  # Tempo application configuration (maps to sub-chart's 'tempo:' key)
+  tempo:
+    reportingEnabled: false
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    storage:
+      trace:
+        backend: local
+        local:
+          path: /var/tempo/traces
+        wal:
+          path: /var/tempo/wal
+    retention: 72h
+
+    # grafana/tempo chart uses camelCase 'metricsGenerator' (not 'metrics_generator').
+    # The chart renders this into the correct metrics_generator: + overrides: Tempo config.
+    metricsGenerator:
+      enabled: true
+      remoteWriteUrl: "http://prom-stack-kube-prometheus-prometheus.observability:9090/api/v1/write"
+
+  # K8s Service (maps to sub-chart root 'service:' key)
+  service:
+    type: ClusterIP
+    port: 3200
+
+  # PVC (maps to sub-chart root 'persistence:' key)
+  persistence:
+    enabled: true
+    size: 10Gi
+
+  # Container resources
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi

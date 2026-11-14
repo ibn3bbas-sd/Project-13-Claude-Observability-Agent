@@ -1,0 +1,122 @@
+# =============================================================================
+#  Diagnose duplicate kubelet scraping
+#
+#  Symptom (found 2026-08-03 while fixing the cluster-summary dashboard): the
+#  cluster has 9 nodes but Prometheus holds 18 machine_memory_bytes series. The
+#  same kubelet metric arrives twice, distinguished only by the `service` label:
+#
+#    {job="kubelet", instance="10.0.2.23:10250", service="prom-stack-kube-prometheus-kubelet"}
+#    {job="kubelet", instance="10.0.2.23:10250", service="rancher-monitoring-kubelet"}
+#
+#  Both were returned by prom-stack's own API, so this is ONE Prometheus scraping
+#  each kubelet twice — not two Prometheis each scraping once. Consequence: every
+#  sum() over a kubelet/cAdvisor metric is doubled. The cluster-summary dashboard
+#  reported 1.01 TiB of memory against a real ~505 GiB and 776 CPU cores against
+#  ~388, and any alert rule that sums these metrics is wrong the same way.
+#
+#  Two candidate causes, and the right fix differs:
+#    A. Two ServiceMonitors both selected by this Prometheus.
+#    B. One ServiceMonitor whose selector matches TWO kubelet Services in
+#       kube-system (kube-prometheus-stack and Rancher both create one, and both
+#       label it k8s-app=kubelet).
+#
+#  And the safe remedy depends on whether Rancher monitoring is still running:
+#  if it is, its Service/ServiceMonitor must keep working; if it is dead cruft,
+#  removing it is the clean fix.
+#
+#  This workflow is READ-ONLY. It gathers exactly the facts needed to choose.
+# =============================================================================
+
+name: Diagnose duplicate kubelet scraping
+
+on:
+  workflow_dispatch:
+
+env:
+  PROM: http://prom-stack-kube-prometheus-prometheus.observability:9090
+
+jobs:
+  diagnose:
+    name: diagnose duplicate kubelet scraping
+    runs-on: stg-runners
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.2
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: Scale of the duplication
+        run: |
+          echo "::group::node count vs series count"
+          echo -n "nodes                        : "
+          kubectl get nodes --no-headers | wc -l
+          for q in 'count(machine_memory_bytes)' \
+                   'count(machine_cpu_cores)' \
+                   'count(node_memory_MemTotal_bytes)' \
+                   'count(kube_node_info)'; do
+            printf '%-30s : ' "$q"
+            curl -sG "$PROM/api/v1/query" --data-urlencode "query=$q" | python3 -c \
+              'import sys,json; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "EMPTY")'
+          done
+          echo "::endgroup::"
+          echo "::group::series grouped by the label that differs"
+          curl -sG "$PROM/api/v1/query" --data-urlencode 'query=count by (service) (machine_memory_bytes)' | python3 -c \
+            'import sys,json; [print(" ", i["metric"].get("service","<none>"), "->", i["value"][1]) for i in json.load(sys.stdin)["data"]["result"]]'
+          echo "::endgroup::"
+          echo "::group::same, by job"
+          curl -sG "$PROM/api/v1/query" --data-urlencode 'query=count by (job) (machine_memory_bytes)' | python3 -c \
+            'import sys,json; [print(" ", i["metric"].get("job","<none>"), "->", i["value"][1]) for i in json.load(sys.stdin)["data"]["result"]]'
+          echo "::endgroup::"
+
+      - name: Which Prometheis exist, and what do they select
+        run: |
+          echo "::group::Prometheus CRs"
+          kubectl get prometheus -A -o custom-columns='NS:.metadata.namespace,NAME:.metadata.name,VERSION:.spec.version,REPLICAS:.spec.replicas'
+          echo "::endgroup::"
+          echo "::group::selectors per Prometheus CR (null == select everything allowed)"
+          kubectl get prometheus -A -o json | python3 -c "import sys,json; d=json.load(sys.stdin); [print(p['metadata']['namespace']+'/'+p['metadata']['name'], '|', k, '=', json.dumps(p['spec'].get(k))) for p in d['items'] for k in ('serviceMonitorSelector','serviceMonitorNamespaceSelector','podMonitorSelector')]"
+          echo "::endgroup::"
+
+      - name: Kubelet Services and ServiceMonitors
+        run: |
+          echo "::group::kubelet Services in kube-system (with labels)"
+          kubectl -n kube-system get svc -l k8s-app=kubelet --show-labels 2>/dev/null || echo "none with k8s-app=kubelet"
+          echo "--- any service whose name contains kubelet ---"
+          kubectl -n kube-system get svc --no-headers 2>/dev/null | grep -i kubelet || echo "none"
+          echo "::endgroup::"
+          echo "::group::ServiceMonitors that target kubelet (all namespaces)"
+          kubectl get servicemonitor -A --no-headers 2>/dev/null | grep -i kubelet || echo "none"
+          echo "::endgroup::"
+          echo "::group::their selectors + labels"
+          kubectl get servicemonitor -A -o json | python3 -c "import sys,json; d=json.load(sys.stdin); [print(sm['metadata']['namespace']+'/'+sm['metadata']['name'], '\n    labels    =', json.dumps(sm['metadata'].get('labels')), '\n    selector  =', json.dumps(sm['spec'].get('selector')), '\n    nsSelector=', json.dumps(sm['spec'].get('namespaceSelector')), '\n    endpoints =', len(sm['spec'].get('endpoints',[]))) for sm in d['items'] if 'kubelet' in sm['metadata']['name'].lower()]"
+          echo "::endgroup::"
+
+      - name: Is Rancher monitoring actually running
+        run: |
+          echo "::group::helm releases mentioning monitoring"
+          helm list -A 2>/dev/null | grep -iE 'monitoring|prom' || echo "none"
+          echo "::endgroup::"
+          echo "::group::rancher monitoring namespaces / pods"
+          for ns in cattle-monitoring-system cattle-dashboards; do
+            echo "--- $ns"
+            kubectl get ns "$ns" >/dev/null 2>&1 \
+              && kubectl -n "$ns" get pods --no-headers 2>/dev/null | head -20 \
+              || echo "namespace does not exist"
+          done
+          echo "::endgroup::"
+          echo "::group::owner of the rancher-monitoring-kubelet Service"
+          kubectl -n kube-system get svc rancher-monitoring-kubelet \
+            -o jsonpath='labels={.metadata.labels}{"\n"}annotations={.metadata.annotations}{"\n"}' 2>/dev/null \
+            || echo "Service not found"
+          echo "::endgroup::"
+
+      - name: Active kubelet scrape targets
+        run: |
+          curl -s --max-time 15 "$PROM/api/v1/targets?state=active" -o /tmp/t.json && \
+          python3 -c "import json,collections; ts=json.load(open('/tmp/t.json'))['data']['activeTargets']; kt=[t for t in ts if 'kubelet' in str(t.get('scrapePool','')).lower()]; print('active kubelet targets:', len(kt)); c=collections.Counter(t.get('scrapePool') for t in kt); [print('  pool', k, '->', v, 'targets') for k,v in c.items()]; [print('  sample:', t['health'], t.get('scrapeUrl'), '| service =', t['labels'].get('service')) for t in kt[:4]]" \
+          || echo "could not read targets"

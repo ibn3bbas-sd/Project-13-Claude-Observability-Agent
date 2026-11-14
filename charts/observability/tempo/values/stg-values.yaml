@@ -1,0 +1,26 @@
+# Ingress at wrapper root — rendered by charts/observability/tempo/templates/ingress.yaml
+ingress:
+  enabled: true
+  ingressClassName: ingress-nginx
+  annotations:
+    kubernetes.io/ingress.class: ingress-nginx
+  hosts:
+    - host: tempo-stg.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+
+# Sub-chart values (all under the 'tempo' dependency-name key)
+tempo:
+  tempo:
+    retention: 72h
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi

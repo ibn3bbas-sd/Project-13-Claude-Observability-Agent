@@ -1,0 +1,157 @@
+# =============================================================================
+#  Fix / verify ingress-nginx metrics
+#
+#  Background (2026-08-03): the NGINX Ingress controller dashboard was empty
+#  because the controller exported no nginx_ingress_controller_* metrics. The
+#  Service, ServiceMonitor and Prometheus target were all already correct — only
+#  controller.metrics.enabled was false, so /metrics served the default Go
+#  registry (40 families, all go_*/process_*) and the scrape succeeded with
+#  nothing useful in it.
+#
+#  Fixed by `helm upgrade --set controller.metrics.enabled=true` (release
+#  default-ingress, REVISION 4). That upgrade used --reuse-values, which reset
+#  controller.replicaCount back to 1 and silently undid an earlier `kubectl scale`
+#  — Helm owns this release, so replica changes must go through values.
+#
+#  mode=diagnose (default) is READ-ONLY.
+#  mode=apply sets replicaCount, then drives traffic through the controller so the
+#  request counters have something to report (they are CounterVecs — no series
+#  exist until a request is served, which is why the dashboard looks empty on a
+#  freshly rolled pod even when everything works).
+#
+#  The runner resolves in-cluster DNS, so both Prometheus and the ingress
+#  controller are reachable by service name; no port-forward is needed.
+# =============================================================================
+
+name: Fix ingress-nginx metrics
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "diagnose (read-only) | apply"
+        required: true
+        default: "diagnose"
+      replicas:
+        description: "controller.replicaCount to set via Helm. Only replicas change, so the running pod is NOT replaced. Set 1 to leave as-is."
+        required: false
+        default: "2"
+      chart_version:
+        description: "Pin the ingress-nginx chart. Must match the installed release (currently 4.12.0) — an unpinned upgrade can reshape the pod spec."
+        required: false
+        default: "4.12.0"
+      probe_host:
+        description: "Host header used to drive traffic through the controller in apply mode."
+        required: false
+        default: "grafana-stg.example.com"
+
+env:
+  NS: ingress-nginx
+  RELEASE: default-ingress
+  DEPLOY: default-ingress-ingress-nginx-controller
+  PROM: http://prom-stack-kube-prometheus-prometheus.observability:9090
+
+jobs:
+  ingress-metrics:
+    name: ${{ inputs.mode }} ingress-nginx metrics
+    runs-on: stg-runners
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.2
+
+      # The runner does not ship helm — deploy-observability.yml installs it the
+      # same way. Without this, apply mode dies with "helm: command not found".
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.4
+
+      - name: State before
+        run: |
+          echo "::group::replicas / pods"
+          kubectl -n "$NS" get deploy "$DEPLOY" \
+            -o jsonpath='desired={.spec.replicas} ready={.status.readyReplicas}{"\n"}'
+          kubectl -n "$NS" get pods -l app.kubernetes.io/name=ingress-nginx \
+            -o wide --no-headers
+          echo "::endgroup::"
+          echo "::group::metrics enabled?"
+          kubectl -n "$NS" get deploy "$DEPLOY" \
+            -o jsonpath='{range .spec.template.spec.containers[0].ports[*]}{.name}{" "}{.containerPort}{"\n"}{end}'
+          kubectl -n "$NS" get deploy "$DEPLOY" \
+            -o jsonpath='{range .spec.template.spec.containers[0].args[*]}{@}{"\n"}{end}' \
+            | grep -i metric || echo "(no --enable-metrics flag)"
+          echo "::endgroup::"
+          echo "::group::scrape endpoints + target health"
+          kubectl -n "$NS" get endpoints ingress-nginx-controller-metrics
+          curl -s --max-time 10 "$PROM/api/v1/targets?state=active" -o /tmp/t.json && \
+          python3 -c "import json; ts=[t for t in json.load(open('/tmp/t.json'))['data']['activeTargets'] if 'ingress' in str(t.get('scrapePool',''))]; print('ingress targets:', len(ts)); [print(' ', t['health'], t.get('scrapeUrl'), t.get('lastError') or '') for t in ts]" \
+          || echo "could not query Prometheus targets"
+          echo "::endgroup::"
+
+      - name: Metric counts before
+        run: |
+          # One entry per metric family the dashboard's panels depend on, so an
+          # empty panel can be attributed to a missing metric vs. absent traffic.
+          for q in 'count(nginx_ingress_controller_config_hash)' \
+                   'count(nginx_ingress_controller_requests)' \
+                   'count(nginx_ingress_controller_nginx_process_connections)' \
+                   'count(nginx_ingress_controller_nginx_process_cpu_seconds_total)' \
+                   'count(nginx_ingress_controller_nginx_process_resident_memory_bytes)' \
+                   'count(nginx_ingress_controller_request_duration_seconds_bucket)' \
+                   'count(nginx_ingress_controller_config_last_reload_successful)' \
+                   'count(nginx_ingress_controller_ssl_expire_time_seconds)'; do
+            printf '%-56s -> ' "$q"
+            curl -sG "$PROM/api/v1/query" --data-urlencode "query=$q" | python3 -c \
+              'import sys,json; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "EMPTY")'
+          done
+
+      # -----------------------------------------------------------------------
+      # apply mode
+      # -----------------------------------------------------------------------
+      - name: Set replicaCount via Helm
+        if: inputs.mode == 'apply'
+        run: |
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx >/dev/null
+          helm repo update ingress-nginx >/dev/null
+          helm upgrade "$RELEASE" ingress-nginx/ingress-nginx \
+            -n "$NS" \
+            --version "${{ inputs.chart_version }}" \
+            --reuse-values \
+            --set controller.replicaCount=${{ inputs.replicas }} \
+            --timeout 5m
+          kubectl -n "$NS" rollout status "deploy/$DEPLOY" --timeout=5m
+          kubectl -n "$NS" get endpoints ingress-nginx-controller-metrics
+
+      - name: Drive traffic through the controller
+        if: inputs.mode == 'apply'
+        run: |
+          SVC="http://$DEPLOY.$NS.svc.cluster.local"
+          echo "Sending 30 requests to $SVC with Host: ${{ inputs.probe_host }}"
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null -m 5 -H "Host: ${{ inputs.probe_host }}" "$SVC/api/health" || true
+          done
+          echo "done"
+
+      - name: Metric counts after
+        if: inputs.mode == 'apply'
+        run: |
+          echo "Waiting 40s for a scrape (ServiceMonitor interval is 30s)..."
+          sleep 40
+          FAIL=0
+          for q in 'count(nginx_ingress_controller_config_hash)' \
+                   'count(nginx_ingress_controller_requests)' \
+                   'sum(nginx_ingress_controller_requests)'; do
+            printf '%-56s -> ' "$q"
+            V=$(curl -sG "$PROM/api/v1/query" --data-urlencode "query=$q" | python3 -c \
+              'import sys,json; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "EMPTY")')
+            echo "$V"
+            [ "$q" = 'count(nginx_ingress_controller_requests)' ] && [ "$V" = "EMPTY" ] && FAIL=1
+          done
+          echo
+          if [ "$FAIL" -eq 1 ]; then
+            echo "::warning::nginx_ingress_controller_requests still has no series. The export path is fine if config_hash is non-empty — this means no request reached the controller. Check that probe_host matches a real Ingress rule."
+          else
+            echo "Reload: https://grafana-stg.example.com/d/nginx/nginx-ingress-controller"
+          fi

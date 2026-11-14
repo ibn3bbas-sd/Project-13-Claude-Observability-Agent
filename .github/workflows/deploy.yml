@@ -1,0 +1,158 @@
+# =============================================================================
+#  Build & Deploy — claude-agent
+#
+#  Builds the Python monitoring container, pushes to registry.example.com/platform/claude-agent,
+#  then deploys the CronJob manifest to the `monitoring` namespace on OKE.
+#
+#  Cluster access:
+#    The OKE cluster has OCI Bastion set up for secure access.
+#    The deploy job runs on a self-hosted runner.
+#    This runner is a VM in the same VCN as the cluster, with the Bastion client
+#
+#  Required repo secrets:
+#    DOCKERHUB_USERNAME     – Docker Hub username (for base image pulls)
+#    DOCKERHUB_TOKEN        – Docker Hub PAT (for base image pulls)
+#    REGISTRY_USER    – Internal registry username
+#    REGISTRY_PASS    – Internal registry password
+#    HELMCHARTS_PAT         – GitHub PAT with read access to helm-charts
+#
+#  Cluster prerequisites (apply once by a cluster admin; CI never touches these):
+#    kubectl apply -f k8s/rbac.yaml              # ServiceAccount, ClusterRole, ClusterRoleBinding
+#    kubectl apply -f k8s/ci-deployer-role.yaml  # grants CI runner CronJob get/create/patch
+#    kubectl -n monitoring create secret docker-registry registry-pull-secret ...
+#    kubectl -n monitoring create secret generic claude-agent-secrets ...
+# =============================================================================
+
+name: Build & Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Tag to build and push (default: branch-sha). Ignored when existing_image is set.'
+        required: false
+        default: ''
+      existing_image:
+        description: >-
+          Skip build — deploy this exact image, e.g. registry.example.com/platform/claude-agent:v0.0.3
+           (useful for re-deploys or hotfixes without code changes). When set, image_tag is ignored.
+        required: false
+        default: ''
+      environment:
+        description: 'Target environment (e.g. stg). Used to select the values file.'
+        required: false
+        default: 'stg'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  REGISTRY: registry.example.com
+  IMAGE_REPO: registry.example.com/platform/claude-agent
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # 1. Build the Docker image and push it to registry.example.com
+  #    Skipped when workflow_dispatch.existing_image is provided.
+  # ---------------------------------------------------------------------------
+
+  build:
+    name: Build (${{ github.ref_name }})
+    if: ${{ inputs.existing_image == '' }}
+    runs-on: stg-runners
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Block non-main branches
+        if: github.ref_name != 'main'
+        run: |
+          echo "::error::Builds must come from 'main' (got '${{ github.ref_name }}')."
+          exit 1
+
+      - name: Checkout app code at chosen branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1   # shallow clone — docker build only needs the working tree
+
+      - name: Compute image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            TAG="${{ inputs.image_tag }}"
+          else
+            SHORT_SHA="${GITHUB_SHA:0:7}"
+            TAG="${GITHUB_REF_NAME}-${SHORT_SHA}"
+          fi
+          # sanitize: lowercase, slashes → dashes (Docker tag rules)
+          TAG=$(echo "$TAG" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Will build: registry.example.com/platform/claude-agent:$TAG"
+
+      - name: Login to Docker Hub
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | \
+            docker login \
+              -u "${{ secrets.DOCKERHUB_USERNAME }}" \
+              --password-stdin
+
+      - name: Login to internal registry
+        run: |
+          echo "${{ secrets.REGISTRY_PASS }}" | \
+            docker login registry.example.com \
+              -u "${{ secrets.REGISTRY_USER }}" \
+              --password-stdin
+
+      - name: Build and push
+        run: |
+          IMAGE="${IMAGE_REPO}:${{ steps.tag.outputs.tag }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+  # ---------------------------------------------------------------------------
+  # 2. Deploy to OKE staging — runner is inside the cluster, kubectl works directly
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to staging
+    needs: build
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: stg-runners
+    steps:
+      - name: Checkout app code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve image
+        id: image
+        run: |
+          if [ -n "${{ inputs.existing_image }}" ]; then
+            IMAGE="${{ inputs.existing_image }}"
+          else
+            IMAGE="${IMAGE_REPO}:${{ needs.build.outputs.tag }}"
+          fi
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "Using image: $IMAGE"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: v1.30.2
+
+      - name: Apply RBAC manifest
+        run: kubectl apply -f k8s/rbac.yaml
+
+      - name: Apply CronJob manifest
+        run: |
+          IMAGE="${{ steps.image.outputs.image }}"
+          echo "Deploying image: $IMAGE"
+          # Substitute image tag in manifest then apply
+          sed "s|registry.example.com/platform/claude-agent:[^ ]*|${IMAGE}|g" \
+            k8s/cronjob.yaml | kubectl apply -f -
+
+      - name: Verify deployment
+        run: |
+          echo "::group::CronJob status"
+          kubectl -n monitoring get cronjob claude-agent -o wide
+          echo "::endgroup::"
+          echo "::group::Recent jobs"
+          kubectl -n monitoring get jobs -l app=claude-agent --sort-by=.metadata.creationTimestamp | tail -5
+          echo "::endgroup::"

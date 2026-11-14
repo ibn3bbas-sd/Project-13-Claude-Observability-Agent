@@ -1,0 +1,871 @@
+name: Diagnose Observability Stack (observability ns)
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix_prometheus:
+        description: "Force-delete stuck Prometheus pod so StatefulSet recreates it (yes/no)"
+        required: false
+        default: "no"
+      fix_prometheus_pvc:
+        description: "Delete corrupt Prometheus PVC and pod so StatefulSet provisions a fresh volume (yes/no). WARNING: deletes all stored metrics data."
+        required: false
+        default: "no"
+      fix_volume_attachment:
+        description: "Delete stale VolumeAttachment for Prometheus PV to unblock Multi-Attach errors, then force-delete the pod (yes/no)"
+        required: false
+        default: "no"
+      fix_stuck_va:
+        description: "Patch VolumeAttachment finalizers to null and force-delete it (unblocks Terminating PVC). Also force-deletes the pod. (yes/no)"
+        required: false
+        default: "no"
+      fix_pause_and_recover:
+        description: "Pause Prometheus CR so Operator stops killing the pod, then force-delete pod, wait 120s for Ready, then unpause. (yes/no)"
+        required: false
+        default: "no"
+      fix_scale_operator:
+        description: "Scale Prometheus Operator to 0, let pod recover for 120s, then scale Operator back to 1. (yes/no)"
+        required: false
+        default: "no"
+      fix_rancher_operator_scope:
+        description: "Patch rancher-monitoring-operator to add --namespaces=cattle-monitoring-system arg, stopping it from reconciling our Prometheus CR. (yes/no)"
+        required: false
+        default: "no"
+      run_test_trace:
+        description: "Send a synthetic OTLP trace through OTel Collector → Tempo → verify it appears in Tempo API. (yes/no)"
+        required: false
+        default: "no"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  diagnose:
+    name: Diagnose observability ns
+    runs-on: stg-runners
+    steps:
+      - name: Checkout app code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.2
+
+      - name: Pod status
+        run: |
+          echo "::group::All pods in observability"
+          kubectl -n observability get pods -o wide
+          echo "::endgroup::"
+
+      - name: Services
+        run: |
+          echo "::group::Services in observability"
+          kubectl -n observability get svc -o wide
+          echo "::endgroup::"
+
+      - name: Ingresses
+        run: |
+          echo "::group::Ingresses in observability"
+          kubectl -n observability get ingress -o yaml
+          echo "::endgroup::"
+
+      - name: Prometheus pod describe
+        run: |
+          echo "::group::Prometheus pod describe"
+          POD=$(kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o name 2>/dev/null | head -1)
+          if [[ -n "$POD" ]]; then
+            kubectl -n observability describe $POD
+          else
+            echo "No prometheus pod found"
+            kubectl -n observability get pods | grep -i prom || true
+          fi
+          echo "::endgroup::"
+
+      - name: Prometheus pod logs (last 50 lines)
+        run: |
+          echo "::group::Prometheus logs"
+          POD=$(kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o name 2>/dev/null | head -1)
+          if [[ -n "$POD" ]]; then
+            kubectl -n observability logs $POD --tail=50 2>&1 || true
+          else
+            echo "No prometheus pod found"
+          fi
+          echo "::endgroup::"
+
+      - name: Loki pod describe
+        run: |
+          echo "::group::Loki pod describe"
+          POD=$(kubectl -n observability get pods -l "app.kubernetes.io/name=loki" -o name 2>/dev/null | head -1)
+          if [[ -z "$POD" ]]; then
+            POD=$(kubectl -n observability get pods -l app=loki -o name 2>/dev/null | head -1)
+          fi
+          if [[ -n "$POD" ]]; then
+            kubectl -n observability describe $POD
+          else
+            echo "No loki pod found"
+            kubectl -n observability get pods | grep -i loki || true
+          fi
+          echo "::endgroup::"
+
+      - name: Loki pod logs (last 50 lines)
+        run: |
+          echo "::group::Loki logs"
+          POD=$(kubectl -n observability get pods -l "app.kubernetes.io/name=loki" -o name 2>/dev/null | head -1)
+          if [[ -z "$POD" ]]; then
+            POD=$(kubectl -n observability get pods -l app=loki -o name 2>/dev/null | head -1)
+          fi
+          if [[ -n "$POD" ]]; then
+            kubectl -n observability logs $POD --tail=50 2>&1 || true
+          else
+            echo "No loki pod found"
+          fi
+          echo "::endgroup::"
+
+      - name: Grafana pod diagnosis
+        run: |
+          echo "::group::Grafana deployment status"
+          kubectl -n observability get deployment monitoring-grafana -o wide 2>/dev/null || echo "Deployment not found"
+          echo "::endgroup::"
+
+          echo "::group::All Grafana pods"
+          kubectl -n observability get pods -l "app.kubernetes.io/name=grafana" -o wide 2>/dev/null
+          echo "::endgroup::"
+
+          echo "::group::Grafana pod describe (all pods)"
+          kubectl -n observability get pods -l "app.kubernetes.io/name=grafana" -o name 2>/dev/null | while read pod; do
+            echo "--- $pod ---"
+            kubectl -n observability describe $pod | tail -30
+          done
+          echo "::endgroup::"
+
+          echo "::group::Grafana crash logs (CrashLoopBackOff pod — previous container)"
+          CRASH_POD=$(kubectl -n observability get pods -l "app.kubernetes.io/name=grafana" \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .status.containerStatuses[*]}{.state.waiting.reason}{end}{"\n"}{end}' 2>/dev/null \
+            | grep "CrashLoopBackOff" | awk '{print $1}' | head -1)
+          if [[ -n "$CRASH_POD" ]]; then
+            echo "Crashing pod: $CRASH_POD"
+            kubectl -n observability logs "$CRASH_POD" --previous --tail=100 2>/dev/null || \
+              kubectl -n observability logs "$CRASH_POD" --tail=100 2>/dev/null || true
+          else
+            echo "No CrashLoopBackOff Grafana pod found — showing running pod logs"
+            POD=$(kubectl -n observability get pods -l "app.kubernetes.io/name=grafana" -o name 2>/dev/null | head -1)
+            [[ -n "$POD" ]] && kubectl -n observability logs $POD --tail=50 2>/dev/null || true
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Grafana image versions in use"
+          kubectl -n observability get pods -l "app.kubernetes.io/name=grafana" \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}' 2>/dev/null || true
+          echo "::endgroup::"
+
+          echo "::group::Grafana datasources (API)"
+          GRAFANA="http://monitoring-grafana.observability:80"
+          AUTH="admin:$(kubectl -n observability get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d)"
+          curl -sf -u "$AUTH" "$GRAFANA/api/datasources" -o /tmp/ds.json 2>/dev/null && \
+          python3 -c "import json; ds=json.load(open('/tmp/ds.json')); [print(f\"uid={d.get('uid')} name={d.get('name')} type={d.get('type')} url={d.get('url')}\") for d in ds]" \
+          || echo "Could not reach Grafana API"
+          echo "::endgroup::"
+
+          echo "::group::Grafana app plugins enabled state"
+          curl -sf -u "$AUTH" "$GRAFANA/api/plugins?type=app&embedded=0" -o /tmp/plugins.json 2>/dev/null && \
+          python3 -c "import json; ps=json.load(open('/tmp/plugins.json')); [print(f\"id={p.get('id')} enabled={p.get('enabled')} state={p.get('state')}\") for p in ps if any(x in p.get('id','') for x in ['drilldown','lokiexplore','exploretraces','metricsdrilldown','pyroscope'])]" \
+          || echo "Could not list plugins"
+          echo "::endgroup::"
+
+          echo "::group::Alertmanager datasource health"
+          curl -sf -u "$AUTH" "$GRAFANA/api/datasources/uid/alertmanager/health" 2>/dev/null \
+          || curl -sf -u "$AUTH" "$GRAFANA/api/datasources/name/alertmanager/health" 2>/dev/null \
+          || echo "alertmanager datasource health check failed or not found"
+          echo "::endgroup::"
+
+          echo "::group::Alertmanager StatefulSet and pods"
+          kubectl -n observability get statefulset -l "app.kubernetes.io/name=alertmanager" 2>/dev/null || echo "No alertmanager StatefulSet found"
+          kubectl -n observability get pods -l "app.kubernetes.io/name=alertmanager" -o wide 2>/dev/null || echo "No alertmanager pods"
+          kubectl get alertmanager -n observability 2>/dev/null || echo "No Alertmanager CR found"
+          echo "::endgroup::"
+
+      - name: Grafana drilldown deep diagnosis
+        run: |
+          GRAFANA="http://monitoring-grafana.observability:80"
+          AUTH="admin:$(kubectl -n observability get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d)"
+          POD=$(kubectl -n observability get pods -l "app.kubernetes.io/name=grafana" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+
+          echo "::group::Grafana rendered grafana.ini (full)"
+          if [[ -n "$POD" ]]; then
+            kubectl exec -n observability "$POD" -c grafana -- cat /etc/grafana/grafana.ini 2>/dev/null \
+              || kubectl exec -n observability "$POD" -- cat /etc/grafana/grafana.ini 2>/dev/null \
+              || echo "Could not read grafana.ini"
+          else
+            echo "No Grafana pod found"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Plugin directories in Grafana container"
+          if [[ -n "$POD" ]]; then
+            echo "--- /usr/share/grafana/plugins/ ---"
+            kubectl exec -n observability "$POD" -c grafana -- ls /usr/share/grafana/plugins/ 2>/dev/null || echo "not found"
+            echo "--- /var/lib/grafana/plugins/ ---"
+            kubectl exec -n observability "$POD" -c grafana -- ls /var/lib/grafana/plugins/ 2>/dev/null || echo "not found or empty"
+            echo "--- Plugin versions (plugin.json for each drilldown app) ---"
+            for p in grafana-lokiexplore-app grafana-exploretraces-app grafana-metricsdrilldown-app; do
+              VER=$(kubectl exec -n observability "$POD" -c grafana -- \
+                sh -c "cat /var/lib/grafana/plugins/$p/plugin.json 2>/dev/null | grep '\"version\"' | head -1" 2>/dev/null || echo "not found")
+              echo "$p: $VER"
+            done
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Grafana logs — plugin and error lines"
+          if [[ -n "$POD" ]]; then
+            kubectl logs -n observability "$POD" -c grafana 2>/dev/null \
+              | grep -iE "plugin|error|warn|fatal|drilldown|loki.*explore|explore.*trace|metric.*drill" \
+              | head -80 || true
+          fi
+          echo "::endgroup::"
+
+          echo "::group::All app plugins (full list from API)"
+          curl -sf -u "$AUTH" "$GRAFANA/api/plugins?type=app" -o /tmp/allplugins.json 2>/dev/null && \
+          python3 -c "import json; ps=json.load(open('/tmp/allplugins.json')); [print('id='+p.get('id','')+' enabled='+str(p.get('enabled'))+' state='+str(p.get('state',''))+' type='+str(p.get('type',''))) for p in ps]" \
+          || echo "Could not list plugins"
+          echo "::endgroup::"
+
+          echo "::group::HTTP status for drilldown app URLs"
+          for app in "grafana-lokiexplore-app" "grafana-exploretraces-app" "grafana-metricsdrilldown-app"; do
+            STATUS=$(curl -sf -o /dev/null -w "%{http_code}" -u "$AUTH" -L "$GRAFANA/a/$app/" 2>/dev/null || echo "curl-error")
+            echo "$app: HTTP $STATUS"
+          done
+          echo "::endgroup::"
+
+          echo "::group::Grafana feature toggles (from rendered ini)"
+          if [[ -n "$POD" ]]; then
+            kubectl exec -n observability "$POD" -c grafana -- cat /etc/grafana/grafana.ini 2>/dev/null \
+              | grep -A20 "feature_toggles" || echo "No feature_toggles section"
+          fi
+          echo "::endgroup::"
+
+      - name: PVC status
+        run: |
+          echo "::group::PVCs in observability"
+          kubectl -n observability get pvc
+          echo "::endgroup::"
+
+      - name: Recent events
+        run: |
+          echo "::group::Events (last 30)"
+          kubectl -n observability get events --sort-by='.lastTimestamp' | tail -30
+          echo "::endgroup::"
+
+      - name: Ingress-nginx endpoints for observability hosts
+        run: |
+          echo "::group::nginx ingress controller logs snippet"
+          POD=$(kubectl -n ingress-nginx get pods -l app.kubernetes.io/name=ingress-nginx -o name 2>/dev/null | head -1)
+          if [[ -n "$POD" ]]; then
+            kubectl -n ingress-nginx logs $POD --tail=30 2>&1 | grep -E 'prometheus|loki|grafana|tempo|otel|error|upstream' || echo "No relevant log lines"
+          else
+            echo "No ingress-nginx pod found"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::ingress-nginx metrics Service endpoints (port 10254)"
+          kubectl get endpoints ingress-nginx-controller-metrics -n ingress-nginx 2>/dev/null || echo "Service not found"
+          echo "---Pod labels in ingress-nginx namespace---"
+          kubectl -n ingress-nginx get pods --show-labels 2>/dev/null | head -10
+          echo "::endgroup::"
+
+          echo "::group::Prometheus targets for ingress-nginx (via API)"
+          curl -s --max-time 10 \
+            "http://prom-stack-kube-prometheus-prometheus.observability:9090/api/v1/targets?state=active" \
+            -o /tmp/prom_targets.json 2>/dev/null && \
+          python3 -c "import json; d=json.load(open('/tmp/prom_targets.json')); ts=[t for t in d.get('data',{}).get('activeTargets',[]) if 'ingress' in t.get('labels',{}).get('job','').lower() or 'ingress' in str(t.get('scrapePool',''))]; [print('job:', t['labels'].get('job'),'| state:', t['health'],'| endpoint:', t.get('scrapeUrl','')) for t in ts] if ts else print('No ingress-nginx targets found in Prometheus')" \
+          || echo "Could not reach Prometheus API or parse response"
+          echo "::endgroup::"
+
+      - name: Endpoint slices for prometheus and loki services
+        run: |
+          echo "::group::Endpoints"
+          kubectl -n observability get endpoints | grep -E 'prom|loki' || echo "(none found in observability)"
+          echo "::endgroup::"
+
+      - name: All Prometheus operators in cluster
+        run: |
+          echo "::group::All prometheus-operator pods (all namespaces)"
+          kubectl get pods -A -l app=kube-prometheus-stack-operator 2>/dev/null | head -10
+          kubectl get pods -A -l app.kubernetes.io/name=prometheus-operator 2>/dev/null | head -10
+          kubectl get pods -A | grep -i "prometheus-operator" | head -10
+          echo "::endgroup::"
+          echo "::group::StatefulSet managedFields (last manager)"
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='{range .metadata.managedFields[*]}{.manager}{"\t"}{.operation}{"\t"}{.time}{"\n"}{end}' 2>/dev/null || echo "StatefulSet not found"
+          echo "::endgroup::"
+
+      - name: Prometheus Operator logs (last 80 lines)
+        run: |
+          echo "::group::Prometheus Operator logs"
+          POD=$(kubectl -n observability get pods -l app=kube-prometheus-stack-operator -o name 2>/dev/null | head -1)
+          if [[ -n "$POD" ]]; then
+            kubectl -n observability logs $POD --tail=80 2>&1 || true
+          else
+            echo "No operator pod found"
+          fi
+          echo "::endgroup::"
+
+      - name: StatefulSet full container list and update status
+        run: |
+          echo "::group::StatefulSet containers"
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='{range .spec.template.spec.containers[*]}{.name}{"\t"}{.image}{"\n"}{end}' 2>/dev/null || echo "StatefulSet not found"
+          echo "---initContainers---"
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='{range .spec.template.spec.initContainers[*]}{.name}{"\t"}{.image}{"\n"}{end}' 2>/dev/null || true
+          echo "::endgroup::"
+          echo "::group::StatefulSet update status"
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='currentRevision={.status.currentRevision}{"\n"}updateRevision={.status.updateRevision}{"\n"}generation={.metadata.generation}{"\n"}observedGeneration={.status.observedGeneration}{"\n"}replicas={.status.replicas}{"\n"}readyReplicas={.status.readyReplicas}{"\n"}updatedReplicas={.status.updatedReplicas}' 2>/dev/null || echo "StatefulSet not found"
+          echo "::endgroup::"
+
+      - name: StatefulSet and Prometheus CR spec
+        run: |
+          echo "::group::StatefulSet affinity spec"
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='{.spec.template.spec.affinity}' 2>/dev/null | python3 -m json.tool || echo "StatefulSet not found or no affinity"
+          echo "::endgroup::"
+          echo "::group::Prometheus CR affinity spec"
+          kubectl get prometheus prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='{.spec.affinity}' 2>/dev/null | python3 -m json.tool || echo "Prometheus CR not found or no affinity"
+          echo "::endgroup::"
+
+      - name: StatefulSet pod-template annotations and namespace selectors
+        run: |
+          echo "::group::StatefulSet pod-template annotations (config-hash lives here)"
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='{.spec.template.metadata.annotations}' 2>/dev/null \
+            | python3 -m json.tool || echo "StatefulSet not found or no annotations"
+          echo "::endgroup::"
+          echo "::group::Prometheus CR namespace selectors (serviceMonitor / podMonitor / rule)"
+          kubectl get prometheus prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='{"\nserviceMonitorNamespaceSelector: "}{.spec.serviceMonitorNamespaceSelector}{"\npodMonitorNamespaceSelector: "}{.spec.podMonitorNamespaceSelector}{"\nruleNamespaceSelector: "}{.spec.ruleNamespaceSelector}{"\nserviceMonitorSelector: "}{.spec.serviceMonitorSelector}{"\n"}' 2>/dev/null \
+            || echo "Prometheus CR not found"
+          echo "::endgroup::"
+          echo "::group::ServiceMonitors in observability namespace"
+          kubectl get servicemonitor -n observability --no-headers 2>/dev/null | head -30 || echo "None"
+          echo "::endgroup::"
+          echo "::group::ServiceMonitors in cattle-monitoring-system namespace (Rancher)"
+          kubectl get servicemonitor -n cattle-monitoring-system --no-headers 2>/dev/null | head -20 || echo "None or namespace missing"
+          echo "::endgroup::"
+
+      - name: Diagnose — Rancher operator args and Prometheus CR selectors
+        run: |
+          echo "::group::Rancher monitoring operator command-line args"
+          RANCHER_POD=$(kubectl -n cattle-monitoring-system get pods \
+            -l app.kubernetes.io/name=rancher-monitoring-operator \
+            -o name 2>/dev/null | head -1)
+          if [[ -z "$RANCHER_POD" ]]; then
+            RANCHER_POD=$(kubectl -n cattle-monitoring-system get pods \
+              -l app=rancher-monitoring-operator \
+              -o name 2>/dev/null | head -1)
+          fi
+          if [[ -z "$RANCHER_POD" ]]; then
+            RANCHER_POD=$(kubectl -n cattle-monitoring-system get pods \
+              -o name 2>/dev/null | grep -i "monitoring-operator\|prometheus-operator" | head -1)
+          fi
+          if [[ -n "$RANCHER_POD" ]]; then
+            echo "Found: $RANCHER_POD"
+            kubectl -n cattle-monitoring-system get $RANCHER_POD \
+              -o jsonpath='{.spec.containers[0].args}' 2>/dev/null | python3 -m json.tool
+          else
+            echo "No Rancher monitoring operator pod found"
+            kubectl get pods -A | grep -i "monitoring-operator" | head -10 || true
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Rancher operator deployment args"
+          kubectl -n cattle-monitoring-system get deployment \
+            -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{.spec.template.spec.containers[0].args}{"\n---\n"}{end}' \
+            2>/dev/null | grep -A 20 "operator" | head -40 || echo "No deployments found"
+          echo "::endgroup::"
+
+          echo "::group::Is Rancher operator reconciling OUR Prometheus CR? (operator logs for 'observability/')"
+          if [[ -n "$RANCHER_POD" ]]; then
+            kubectl -n cattle-monitoring-system logs "$RANCHER_POD" --tail=50 2>&1 \
+              | grep -E "observability/prom-stack|sync prometheus|reconcile" | head -20 || echo "No matches"
+          else
+            echo "No Rancher operator pod"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Our Prometheus CR labels (need to match Rancher operator's selector to be reconciled by it)"
+          kubectl get prometheus prom-stack-kube-prometheus-prometheus -n observability \
+            -o jsonpath='{.metadata.labels}' 2>/dev/null | python3 -m json.tool \
+            || echo "Prometheus CR not found"
+          echo "::endgroup::"
+
+          echo "::group::STS managedFields — who is managing and when (to detect 2 operators)"
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='{range .metadata.managedFields[*]}{.manager}{"\t"}{.operation}{"\t"}{.subresource}{"\t"}{.time}{"\n"}{end}' \
+            2>/dev/null || echo "STS not found"
+          echo "::endgroup::"
+
+      - name: Fix — scope Rancher operator to cattle-monitoring-system only
+        if: inputs.fix_rancher_operator_scope == 'yes'
+        run: |
+          NS="cattle-monitoring-system"
+          DEPLOY="rancher-monitoring-operator"
+          STS="prometheus-prom-stack-kube-prometheus-prometheus"
+          FLAG="--namespaces=cattle-monitoring-system"
+
+          echo "=== Current Rancher operator args ==="
+          kubectl -n "$NS" get deployment "$DEPLOY" \
+            -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null | python3 -m json.tool || true
+
+          echo ""
+          echo "=== Checking if flag already present ==="
+          ALREADY=$(kubectl -n "$NS" get deployment "$DEPLOY" \
+            -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null | grep -c "namespaces=cattle" || echo "0")
+          if [ "$ALREADY" -gt "0" ]; then
+            echo "Flag already present — skipping patch"
+          else
+            echo "=== Patching: appending $FLAG to container args ==="
+            kubectl -n "$NS" patch deployment "$DEPLOY" \
+              --type=json \
+              -p="[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"$FLAG\"}]"
+            echo "Patch applied. Waiting for rollout..."
+            kubectl -n "$NS" rollout status deployment/"$DEPLOY" --timeout=60s || true
+          fi
+
+          echo ""
+          echo "=== Rancher operator args after patch ==="
+          kubectl -n "$NS" get deployment "$DEPLOY" \
+            -o jsonpath='{.spec.template.spec.containers[0].args}' 2>/dev/null | python3 -m json.tool || true
+
+          echo ""
+          echo "=== Waiting 30s then checking if our STS generation stopped incrementing ==="
+          sleep 30
+          GEN1=$(kubectl get statefulset "$STS" -n observability \
+            -o jsonpath='{.metadata.generation}' 2>/dev/null || echo "?")
+          sleep 10
+          GEN2=$(kubectl get statefulset "$STS" -n observability \
+            -o jsonpath='{.metadata.generation}' 2>/dev/null || echo "?")
+          echo "generation T=0: $GEN1"
+          echo "generation T=10: $GEN2"
+          if [ "$GEN1" = "$GEN2" ]; then
+            echo "SUCCESS: generation stopped incrementing!"
+          else
+            echo "STILL INCREMENTING: gen $GEN1 → $GEN2 in 10s"
+          fi
+
+          echo ""
+          echo "=== Waiting 120s for pod to stabilize ==="
+          sleep 120
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide || true
+          GEN3=$(kubectl get statefulset "$STS" -n observability \
+            -o jsonpath='{.metadata.generation}' 2>/dev/null || echo "?")
+          echo "generation after 130s: $GEN3"
+
+          echo ""
+          echo "=== Rancher operator recent logs (should no longer show observability/prom-stack) ==="
+          RANCHER_POD=$(kubectl -n "$NS" get pods -l app.kubernetes.io/name=rancher-monitoring-operator \
+            -o name 2>/dev/null | head -1 || \
+            kubectl -n "$NS" get pods -o name 2>/dev/null | grep monitoring-operator | head -1)
+          if [[ -n "$RANCHER_POD" ]]; then
+            kubectl -n "$NS" logs "$RANCHER_POD" --tail=20 2>&1 | grep "sync prometheus" | head -20 || echo "No sync logs"
+          fi
+
+      - name: Diagnose — node-exporter pending pods
+        run: |
+          echo "::group::node-exporter DaemonSet status"
+          kubectl -n observability get daemonset prom-stack-prometheus-node-exporter -o wide 2>/dev/null || \
+            kubectl -n observability get daemonset | grep node-exporter || echo "DaemonSet not found"
+          echo "::endgroup::"
+
+          echo "::group::Describe one pending node-exporter pod"
+          POD=$(kubectl -n observability get pods | grep "node-exporter" | grep "Pending" | awk '{print $1}' | head -1)
+          if [[ -n "$POD" ]]; then
+            kubectl -n observability describe pod "$POD"
+          else
+            echo "No pending node-exporter pod found"
+          fi
+          echo "::endgroup::"
+
+          echo "::group::Node-exporter DaemonSet tolerations"
+          kubectl -n observability get daemonset prom-stack-prometheus-node-exporter \
+            -o jsonpath='{.spec.template.spec.tolerations}' 2>/dev/null | python3 -m json.tool || echo "none"
+          echo "::endgroup::"
+
+          echo "::group::Promtail DaemonSet tolerations (for comparison)"
+          kubectl -n observability get daemonset loki-stack-promtail \
+            -o jsonpath='{.spec.template.spec.tolerations}' 2>/dev/null | python3 -m json.tool || echo "none"
+          echo "::endgroup::"
+
+          echo "::group::Cluster nodes and their taints"
+          kubectl get nodes -o custom-columns='NAME:.metadata.name,TAINTS:.spec.taints' 2>/dev/null || true
+          echo "::endgroup::"
+
+          echo "::group::Rancher node-exporter DaemonSet in cattle-monitoring-system"
+          kubectl -n cattle-monitoring-system get daemonset 2>/dev/null | grep -i node-exporter || echo "none found"
+          echo "::endgroup::"
+
+          echo "::group::node-exporter DaemonSet full affinity spec"
+          kubectl -n observability get daemonset prom-stack-prometheus-node-exporter \
+            -o jsonpath='{.spec.template.spec.affinity}' 2>/dev/null | python3 -m json.tool || echo "none"
+          echo "::endgroup::"
+
+      - name: VolumeAttachment status for Prometheus PVC
+        run: |
+          echo "::group::VolumeAttachments for prom PV"
+          PV=$(kubectl -n observability get pvc \
+            prometheus-prom-stack-kube-prometheus-prometheus-db-prometheus-prom-stack-kube-prometheus-prometheus-0 \
+            -o jsonpath='{.spec.volumeName}' 2>/dev/null || echo "")
+          if [[ -n "$PV" ]]; then
+            echo "PV: $PV"
+            kubectl get volumeattachment -o wide | grep "$PV" || echo "No VolumeAttachment found for $PV"
+          else
+            echo "PVC not found or not bound"
+            kubectl get volumeattachment -o wide | grep -i prom || echo "No prom VolumeAttachment found"
+          fi
+          echo "::endgroup::"
+
+      - name: Fix — delete stale VolumeAttachment to unblock Multi-Attach
+        if: inputs.fix_volume_attachment == 'yes'
+        run: |
+          PVC="prometheus-prom-stack-kube-prometheus-prometheus-db-prometheus-prom-stack-kube-prometheus-prometheus-0"
+          POD="prometheus-prom-stack-kube-prometheus-prometheus-0"
+
+          echo "Force-deleting stuck pod ..."
+          kubectl delete pod "$POD" -n observability --force --grace-period=0 2>/dev/null || echo "Pod not found"
+
+          echo "Finding VolumeAttachment for Prometheus PV ..."
+          PV=$(kubectl -n observability get pvc "$PVC" -o jsonpath='{.spec.volumeName}' 2>/dev/null || echo "")
+          echo "PV: $PV"
+
+          if [[ -n "$PV" ]]; then
+            VA=$(kubectl get volumeattachment \
+              -o jsonpath="{range .items[*]}{.metadata.name}{'\t'}{.spec.source.persistentVolumeName}{'\n'}{end}" \
+              | awk -v pv="$PV" '$2==pv{print $1}')
+            if [[ -n "$VA" ]]; then
+              echo "Deleting VolumeAttachment: $VA"
+              kubectl delete volumeattachment "$VA" --force --grace-period=0
+            else
+              echo "No VolumeAttachment found for PV $PV"
+            fi
+          else
+            echo "PVC not bound — no VolumeAttachment to clean"
+          fi
+
+          echo "Waiting 20s for StatefulSet to reschedule ..."
+          sleep 20
+          echo "Current pod status:"
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide
+
+      - name: Fix — pause Prometheus CR, recover pod, then unpause
+        if: inputs.fix_pause_and_recover == 'yes'
+        run: |
+          PROM_CR="prom-stack-kube-prometheus-prometheus"
+          POD="prometheus-prom-stack-kube-prometheus-prometheus-0"
+
+          echo "=== Pausing Prometheus CR (stops Operator from killing the pod) ==="
+          kubectl patch prometheus "$PROM_CR" -n observability \
+            --type=merge -p '{"spec":{"paused":true}}'
+          echo "Paused."
+
+          echo ""
+          echo "=== Force-deleting pod so StatefulSet creates fresh one ==="
+          kubectl delete pod "$POD" -n observability --force --grace-period=0 2>/dev/null || echo "Pod not found"
+
+          echo ""
+          echo "=== Waiting 30s for pod to appear ==="
+          sleep 30
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide || true
+
+          echo ""
+          echo "=== Waiting 90s more for Prometheus readiness probe (initialDelaySeconds=30+) ==="
+          sleep 90
+
+          echo ""
+          echo "=== Pod status after 120s ==="
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide || true
+
+          READY=$(kubectl -n observability get pods -l app.kubernetes.io/name=prometheus \
+            -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="prometheus")].ready}' 2>/dev/null || echo "false")
+          echo "Prometheus container ready: $READY"
+
+          echo ""
+          echo "=== Unpausing Prometheus CR ==="
+          kubectl patch prometheus "$PROM_CR" -n observability \
+            --type=merge -p '{"spec":{"paused":false}}'
+          echo "Unpaused."
+
+          echo ""
+          echo "=== Final pod status ==="
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide || true
+          echo "---"
+          kubectl -n observability get endpoints | grep prom || true
+
+      - name: Fix — scale Operator to 0, let pod recover, scale back to 1
+        if: inputs.fix_scale_operator == 'yes'
+        run: |
+          OPERATOR_DEPLOY="prom-stack-kube-prometheus-operator"
+          POD="prometheus-prom-stack-kube-prometheus-prometheus-0"
+
+          echo "=== Scaling Prometheus Operator to 0 (stops all reconciles) ==="
+          kubectl scale deployment "$OPERATOR_DEPLOY" -n observability --replicas=0
+          kubectl rollout status deployment/"$OPERATOR_DEPLOY" -n observability --timeout=30s || true
+          echo "Operator scaled to 0."
+
+          echo ""
+          echo "=== Force-deleting current Prometheus pod so StatefulSet recreates from stored spec ==="
+          kubectl delete pod "$POD" -n observability --force --grace-period=0 2>/dev/null || echo "Pod not found"
+
+          echo ""
+          echo "=== Waiting 30s for pod to appear ==="
+          sleep 30
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide || true
+
+          echo ""
+          echo "=== Waiting 90s more for Prometheus readiness probe (initialDelaySeconds=30+) ==="
+          sleep 90
+
+          echo ""
+          echo "=== Pod status after 120s ==="
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide || true
+
+          READY=$(kubectl -n observability get pods -l app.kubernetes.io/name=prometheus \
+            -o jsonpath='{.items[0].status.containerStatuses[?(@.name=="prometheus")].ready}' 2>/dev/null || echo "false")
+          echo "Prometheus container ready: $READY"
+
+          echo ""
+          echo "=== StatefulSet revision BEFORE operator restarts ==="
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='currentRevision={.status.currentRevision}{"\n"}updateRevision={.status.updateRevision}{"\n"}generation={.metadata.generation}' 2>/dev/null || true
+
+          echo ""
+          echo "=== Scaling Prometheus Operator back to 1 ==="
+          kubectl scale deployment "$OPERATOR_DEPLOY" -n observability --replicas=1
+          kubectl rollout status deployment/"$OPERATOR_DEPLOY" -n observability --timeout=60s || true
+          echo "Operator scaled to 1."
+
+          echo ""
+          echo "=== Waiting 30s for Operator first reconcile ==="
+          sleep 30
+
+          echo ""
+          echo "=== Pod status after operator restart ==="
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide || true
+
+          echo ""
+          echo "=== StatefulSet revision AFTER operator restarts (compare to BEFORE) ==="
+          kubectl get statefulset prometheus-prom-stack-kube-prometheus-prometheus \
+            -n observability \
+            -o jsonpath='currentRevision={.status.currentRevision}{"\n"}updateRevision={.status.updateRevision}{"\n"}generation={.metadata.generation}' 2>/dev/null || true
+
+          echo ""
+          echo "=== Recent events (should be no Killing events if operator spec is stable) ==="
+          kubectl -n observability get events --sort-by='.lastTimestamp' | tail -20
+
+      - name: Fix — patch VA finalizers and force-delete to unblock Terminating PVC
+        if: inputs.fix_stuck_va == 'yes'
+        run: |
+          PVC="prometheus-prom-stack-kube-prometheus-prometheus-db-prometheus-prom-stack-kube-prometheus-prometheus-0"
+          POD="prometheus-prom-stack-kube-prometheus-prometheus-0"
+
+          echo "=== Finding VolumeAttachment for Prometheus PV ==="
+          PV=$(kubectl -n observability get pvc "$PVC" -o jsonpath='{.spec.volumeName}' 2>/dev/null || echo "")
+          echo "PV: $PV"
+
+          if [[ -n "$PV" ]]; then
+            VA=$(kubectl get volumeattachment \
+              -o jsonpath="{range .items[*]}{.metadata.name}{'\t'}{.spec.source.persistentVolumeName}{'\n'}{end}" \
+              | awk -v pv="$PV" '$2==pv{print $1}')
+            if [[ -n "$VA" ]]; then
+              echo "Found VolumeAttachment: $VA"
+              echo "Patching finalizers to null ..."
+              kubectl patch volumeattachment "$VA" \
+                --type=json \
+                -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || \
+              kubectl patch volumeattachment "$VA" \
+                -p '{"metadata":{"finalizers":null}}' || echo "Patch failed (may already have no finalizers)"
+              echo "Force-deleting VolumeAttachment ..."
+              kubectl delete volumeattachment "$VA" --force --grace-period=0 || echo "Delete failed"
+            else
+              echo "No VolumeAttachment found for PV $PV"
+            fi
+          else
+            echo "PVC not found — checking by volume name pattern ..."
+            kubectl get volumeattachment -o wide | grep -i "prometheus" || echo "No VA found"
+          fi
+
+          echo ""
+          echo "=== Ensuring PVC finalizers are null ==="
+          kubectl patch pvc "$PVC" -n observability \
+            -p '{"metadata":{"finalizers":null}}' 2>/dev/null || echo "PVC not found or no finalizer"
+
+          echo ""
+          echo "=== Deleting PVC (--wait=false so this never hangs) ==="
+          kubectl delete pvc "$PVC" -n observability --ignore-not-found --wait=false
+
+          echo ""
+          echo "=== Force-deleting pod ==="
+          kubectl delete pod "$POD" -n observability --force --grace-period=0 2>/dev/null || echo "Pod not found"
+
+          echo ""
+          echo "=== Waiting 30s for Prometheus Operator to provision fresh PVC and pod ==="
+          sleep 30
+
+          echo ""
+          echo "=== Current state ==="
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus -o wide || true
+          echo "---"
+          kubectl -n observability get pvc | grep -E 'prom|NAME' || true
+          echo "---"
+          kubectl get volumeattachment -o wide | grep -E 'prom' || echo "No prom VolumeAttachment found"
+
+      - name: Fix — force-delete stuck Prometheus pod
+        if: inputs.fix_prometheus == 'yes'
+        run: |
+          POD="prometheus-prom-stack-kube-prometheus-prometheus-0"
+          echo "Force-deleting $POD ..."
+          kubectl delete pod "$POD" -n observability --force --grace-period=0
+          echo "Waiting for StatefulSet to recreate the pod ..."
+          sleep 10
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus
+          echo "Done — redeploy may take ~2 min for Prometheus to become Ready."
+
+      - name: Test — send synthetic OTLP trace and verify in Tempo
+        if: inputs.run_test_trace == 'yes'
+        run: |
+          python3 - <<'PYEOF'
+          import json, time, random, urllib.request, urllib.error
+
+          # Generate random trace/span IDs (16-byte / 8-byte hex)
+          trace_id = ''.join(f'{random.randint(0,255):02x}' for _ in range(16))
+          span_id  = ''.join(f'{random.randint(0,255):02x}' for _ in range(8))
+          now_ns   = str(int(time.time() * 1e9))
+          end_ns   = str(int(time.time() * 1e9) + 500_000_000)  # +500ms
+
+          payload = {
+            "resourceSpans": [{
+              "resource": {
+                "attributes": [
+                  {"key": "service.name",    "value": {"stringValue": "trace-pipeline-test"}},
+                  {"key": "service.version", "value": {"stringValue": "1.0.0"}}
+                ]
+              },
+              "scopeSpans": [{
+                "scope": {"name": "pipeline-test", "version": "1.0"},
+                "spans": [{
+                  "traceId":            trace_id,
+                  "spanId":             span_id,
+                  "name":               "test-request",
+                  "kind":               2,
+                  "startTimeUnixNano":  now_ns,
+                  "endTimeUnixNano":    end_ns,
+                  "attributes": [
+                    {"key": "http.method", "value": {"stringValue": "GET"}},
+                    {"key": "http.url",    "value": {"stringValue": "/healthz"}}
+                  ],
+                  "status": {"code": 1}
+                }]
+              }]
+            }]
+          }
+
+          collector_url = "http://otelcol-opentelemetry-collector.observability:4318/v1/traces"
+          print(f"Sending trace {trace_id} to {collector_url}")
+
+          req = urllib.request.Request(
+            collector_url,
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+          )
+          try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+              print(f"Collector response: {resp.status} {resp.read().decode()}")
+          except urllib.error.HTTPError as e:
+            print(f"Collector HTTP error: {e.code} {e.read().decode()}")
+            raise
+
+          print("Waiting 5s for Tempo to ingest...")
+          time.sleep(5)
+
+          tempo_url = f"http://tempo.observability:3200/api/traces/{trace_id}"
+          print(f"Querying Tempo: {tempo_url}")
+          req2 = urllib.request.Request(tempo_url)
+          try:
+            with urllib.request.urlopen(req2, timeout=10) as resp:
+              body = resp.read().decode()
+              data = json.loads(body)
+              spans = data.get("batches", [{}])[0].get("scopeSpans", [{}])[0].get("spans", [])
+              print(f"SUCCESS — Trace found in Tempo! Spans: {len(spans)}")
+              print(f"  Trace ID : {trace_id}")
+              print(f"  In Grafana: Explore > Tempo > TraceQL > paste:  {{  }}")
+              print(f"  Or direct: Explore > Tempo > 'Search' tab > Service = trace-pipeline-test")
+          except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            print(f"Tempo returned {e.code}: {body}")
+            if e.code == 404:
+              print("Trace not found — check OTel Collector logs:")
+              print("  kubectl logs -n observability deployment/otelcol-opentelemetry-collector --tail=30")
+            raise
+          PYEOF
+
+      - name: Fix — delete corrupt Prometheus PVC and pod (fresh volume)
+        if: inputs.fix_prometheus_pvc == 'yes'
+        run: |
+          PVC="prometheus-prom-stack-kube-prometheus-prometheus-db-prometheus-prom-stack-kube-prometheus-prometheus-0"
+          POD="prometheus-prom-stack-kube-prometheus-prometheus-0"
+
+          echo "Force-deleting any stuck Prometheus pod ..."
+          kubectl delete pod "$POD" -n observability --force --grace-period=0 2>/dev/null || echo "Pod not found or already deleted"
+
+          echo "Finding and patching all VolumeAttachment finalizers for Prometheus PV ..."
+          PV=$(kubectl -n observability get pvc "$PVC" -o jsonpath='{.spec.volumeName}' 2>/dev/null || echo "")
+          echo "PV: ${PV:-(not found)}"
+          if [[ -n "$PV" ]]; then
+            VA=$(kubectl get volumeattachment \
+              -o jsonpath="{range .items[*]}{.metadata.name}{'\t'}{.spec.source.persistentVolumeName}{'\n'}{end}" \
+              | awk -v pv="$PV" '$2==pv{print $1}')
+            if [[ -n "$VA" ]]; then
+              echo "Found VolumeAttachment: $VA — patching finalizers to null ..."
+              kubectl patch volumeattachment "$VA" \
+                --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' 2>/dev/null || \
+              kubectl patch volumeattachment "$VA" \
+                -p '{"metadata":{"finalizers":null}}' || true
+              kubectl delete volumeattachment "$VA" --force --grace-period=0 || true
+            else
+              echo "No VolumeAttachment found for PV $PV"
+            fi
+          fi
+
+          echo "Removing pvc-protection finalizer so delete won't block ..."
+          kubectl patch pvc "$PVC" -n observability \
+            -p '{"metadata":{"finalizers":null}}' 2>/dev/null || echo "PVC not found or no finalizer"
+
+          echo "Deleting corrupt PVC (--wait=false so this never hangs) ..."
+          kubectl delete pvc "$PVC" -n observability --ignore-not-found --wait=false
+
+          echo "PVC deletion triggered. Waiting 30s for Prometheus Operator to provision fresh PVC ..."
+          sleep 30
+          echo "Current pod status:"
+          kubectl -n observability get pods -l app.kubernetes.io/name=prometheus
+          echo "Current PVCs:"
+          kubectl -n observability get pvc | grep -E 'prom|NAME'
+
+      - name: Check Grafana registry for lokiexplore versions
+        run: |
+          echo "::group::Available versions of grafana-lokiexplore-app on Grafana registry"
+          curl -sf "https://grafana.com/api/plugins/grafana-lokiexplore-app/versions?system=linux&arch=amd64" \
+            -o /tmp/loki_versions.json 2>/dev/null && \
+          python3 -c "import json; d=json.load(open('/tmp/loki_versions.json')); items=d.get('items',[]); [print(v.get('version','?'),'grafana:',v.get('grafanaVersion','?')) for v in items[:20]]; print('total:',d.get('totalCount',len(items)))" \
+          || echo "Could not query Grafana registry"
+          echo "::endgroup::"

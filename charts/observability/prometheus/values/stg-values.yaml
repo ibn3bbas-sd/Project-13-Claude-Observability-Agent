@@ -1,0 +1,102 @@
+kube-prometheus-stack:
+  # Restrict our prometheus-operator to the monitoring namespace only.
+  # Without this, it races with Rancher's prometheus-operator (both use field manager
+  # name "PrometheusOperator") on the same Prometheus/Alertmanager CRs, causing
+  # continuous spec overwrites and an infinite StatefulSet rolling-update loop.
+  prometheusOperator:
+    namespaces:
+      releaseNamespace: true
+      additional: []
+
+  prometheus:
+    ingress:
+      enabled: true
+      ingressClassName: ingress-nginx
+      hosts:
+        - prometheus-stg.example.com
+      paths:
+        - /
+      pathType: Prefix
+
+    prometheusSpec:
+      retention: 7d
+      # Enable remote write receiver so Tempo's metrics-generator can push span RED metrics
+      enableRemoteWriteReceiver: true
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 3Gi
+      # Probes made extremely lenient — OOMKill + WAL replay can take a long time.
+      # Liveness: 240 × 5s = 20 min before kill. Startup: 480 × 15s = 2 hr before kill.
+      livenessProbeFailureThreshold: 240
+      livenessProbeTimeout: 30
+      startupProbeFailureThreshold: 480
+      readinessProbeFailureThreshold: 240
+      # Pin to one node so the RWO OCI block volume never has Multi-Attach errors
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - "10.0.2.21"
+      # Restrict to monitoring namespace only — prevents Rancher's cattle-monitoring-system
+      # ServiceMonitors from being included in our config hash → infinite rolling updates.
+      # Must use matchLabels (valid LabelSelector syntax), not matchNames (not a real field).
+      serviceMonitorNamespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+      podMonitorNamespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+      ruleNamespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: observability
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                # OCI block volume minimum is 50Gi; matching avoids NodeExpandVolume RBAC errors
+                storage: 50Gi
+
+  alertmanager:
+    enabled: true
+    alertmanagerSpec:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+
+  nodeExporter:
+    enabled: true
+
+  prometheus-node-exporter:
+    # Use pod network instead of host network — avoids hostPort conflict with
+    # Rancher's rancher-monitoring-prometheus-node-exporter which binds port 9100
+    # on every node. Our node-exporter listens on pod IP:9100 only; the ClusterIP
+    # service routes Prometheus scrape traffic to it.
+    hostNetwork: false
+    hostPID: true
+    service:
+      port: 9100
+      targetPort: 9100
+
+  kubeStateMetrics:
+    resources:
+      requests:
+        cpu: 30m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi

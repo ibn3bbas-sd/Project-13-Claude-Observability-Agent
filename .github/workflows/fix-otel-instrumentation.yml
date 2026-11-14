@@ -1,0 +1,180 @@
+name: Fix OTel Instrumentation CRs
+
+# Ensures every namespace with OTel auto-inject annotations has an Instrumentation CR
+# pointing to our collector (otelcol-opentelemetry-collector.observability:4318).
+# Safe to run at any time — idempotent, only restarts pods when the endpoint was wrong.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "dry_run=yes → discover only, no apply/restart"
+        required: false
+        default: "no"
+
+jobs:
+  fix-instrumentation:
+    name: Fix OTel Instrumentation CRs
+    runs-on: stg-runners
+    steps:
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.30.2
+
+      - name: Ensure OTel Instrumentation CR in all instrumented namespaces
+        run: |
+          TARGET="http://otelcol-opentelemetry-collector.observability:4318"
+          DRY_RUN="${{ inputs.dry_run }}"
+
+          echo "Target endpoint: $TARGET"
+          echo "Dry run: $DRY_RUN"
+
+          # ── Check OTel Operator CRDs ────────────────────────────────────────
+          echo "::group::OTel Operator CRDs"
+          if ! kubectl get crd instrumentations.opentelemetry.io &>/dev/null; then
+            echo "OTel Operator CRDs not installed — nothing to do"
+            echo "::endgroup::"
+            exit 0
+          fi
+          echo "instrumentations.opentelemetry.io CRD present"
+          echo "::endgroup::"
+
+          # ── Existing Instrumentation CRs (cluster-wide) ────────────────────
+          echo "::group::Existing Instrumentation CRs"
+          kubectl get instrumentation -A -o json | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          items = data.get('items', [])
+          if not items:
+              print('  (none)')
+          for item in items:
+              ns   = item['metadata']['namespace']
+              name = item['metadata']['name']
+              ep   = item.get('spec', {}).get('exporter', {}).get('endpoint', '(not set)')
+              print(f'  {ns}/{name}  ->  {ep}')
+          " || echo "  (error listing CRs)"
+          echo "::endgroup::"
+
+          # ── Discover namespaces with inject annotations ─────────────────────
+          echo "::group::Deployments with OTel inject annotations (all namespaces)"
+          kubectl get deployments -A -o json | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          inject_keys = ['instrumentation.opentelemetry.io/inject-nodejs', 'instrumentation.opentelemetry.io/inject-java', 'instrumentation.opentelemetry.io/inject-python', 'instrumentation.opentelemetry.io/inject-dotnet', 'instrumentation.opentelemetry.io/inject-go']
+          found = False
+          for dep in data.get('items', []):
+              ann = dep.get('spec', {}).get('template', {}).get('metadata', {}).get('annotations', {})
+              matched = [k for k in inject_keys if k in ann]
+              if matched:
+                  found = True
+                  ns   = dep['metadata']['namespace']
+                  name = dep['metadata']['name']
+                  for k in matched:
+                      print(f'  {ns}/{name}  {k}={ann[k]}')
+          if not found:
+              print('  (none found)')
+          " || true
+          echo "::endgroup::"
+
+          # Build the list of namespaces that need a CR
+          NAMESPACES=$(kubectl get deployments -A -o json | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          inject_keys = ['instrumentation.opentelemetry.io/inject-nodejs', 'instrumentation.opentelemetry.io/inject-java', 'instrumentation.opentelemetry.io/inject-python', 'instrumentation.opentelemetry.io/inject-dotnet', 'instrumentation.opentelemetry.io/inject-go']
+          ns_set = set()
+          for dep in data.get('items', []):
+              ann = dep.get('spec', {}).get('template', {}).get('metadata', {}).get('annotations', {})
+              if any(k in ann for k in inject_keys):
+                  ns_set.add(dep['metadata']['namespace'])
+          print(' '.join(sorted(ns_set)))
+          ")
+
+          if [[ -z "$NAMESPACES" ]]; then
+            echo "No deployments with OTel inject annotations found — nothing to do"
+            exit 0
+          fi
+
+          echo "Instrumented namespaces: $NAMESPACES"
+
+          # ── Apply / check each namespace ────────────────────────────────────
+          NEEDS_RESTART=""
+          for NS in $NAMESPACES; do
+            CURRENT=$(kubectl get instrumentation default -n "$NS" \
+              -o jsonpath='{.spec.exporter.endpoint}' 2>/dev/null || echo "")
+
+            if [[ "$CURRENT" == "$TARGET" ]]; then
+              echo "  v $NS/default already correct ($TARGET)"
+              continue
+            fi
+
+            echo "  x $NS/default: '${CURRENT:-<missing>}' -> '$TARGET'"
+
+            if [[ "$DRY_RUN" == "yes" ]]; then
+              echo "    [dry-run] skipping apply"
+              continue
+            fi
+
+            cat <<EOF | kubectl apply -f -
+          apiVersion: opentelemetry.io/v1alpha1
+          kind: Instrumentation
+          metadata:
+            name: default
+            namespace: ${NS}
+          spec:
+            exporter:
+              endpoint: ${TARGET}
+            propagators:
+              - tracecontext
+              - baggage
+            sampler:
+              type: parentbased_traceidratio
+              argument: "1"
+          EOF
+
+            echo "    Applied Instrumentation CR in $NS"
+            NEEDS_RESTART="$NEEDS_RESTART $NS"
+          done
+
+          # ── Rolling restart only in namespaces we just fixed ────────────────
+          if [[ -z "$NEEDS_RESTART" ]]; then
+            echo "All namespaces already correct — no restarts needed"
+            exit 0
+          fi
+
+          for NS in $NEEDS_RESTART; do
+            echo "::group::Rolling restart of instrumented deployments in $NS"
+            kubectl get deployments -n "$NS" -o json | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          inject_keys = ['instrumentation.opentelemetry.io/inject-nodejs', 'instrumentation.opentelemetry.io/inject-java', 'instrumentation.opentelemetry.io/inject-python', 'instrumentation.opentelemetry.io/inject-dotnet', 'instrumentation.opentelemetry.io/inject-go']
+          for dep in data.get('items', []):
+              ann = dep.get('spec', {}).get('template', {}).get('metadata', {}).get('annotations', {})
+              if any(k in ann for k in inject_keys):
+                  print(dep['metadata']['name'])
+            " | while read -r dep; do
+              echo "  Restarting deployment/$dep in $NS"
+              kubectl rollout restart deployment/"$dep" -n "$NS" || true
+            done
+            echo "::endgroup::"
+          done
+
+          # ── Show injected OTLP env vars after restart ───────────────────────
+          echo "::group::OTLP env vars injected into running pods (all instrumented ns)"
+          sleep 10
+          for NS in $NEEDS_RESTART; do
+            kubectl get pods -n "$NS" -o json | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          for pod in data.get('items', []):
+              for c in pod.get('spec', {}).get('containers', []):
+                  for env in c.get('env', []):
+                      n = env.get('name', '')
+                      if 'OTLP' in n or 'OTEL_EXPORTER' in n:
+                          pname = pod['metadata']['name']
+                          cname = c['name']
+                          val   = env.get('value', '(valueFrom)')
+                          print(f'  {pname}/{cname}: {n}={val}')
+            " || true
+          done
+          echo "::endgroup::"

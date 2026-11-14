@@ -1,0 +1,141 @@
+---
+# CI deploys this file directly (deploy.yml seds the image tag and applies it).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: claude-agent
+  namespace: monitoring
+  labels:
+    app: claude-agent
+spec:
+  schedule: "*/5 * * * *"          # every 5 minutes
+  concurrencyPolicy: Forbid         # don't overlap runs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0               # don't retry on failure; wait for next run
+      template:
+        metadata:
+          labels:
+            app: claude-agent
+        spec:
+          serviceAccountName: claude-agent
+          restartPolicy: Never
+
+          imagePullSecrets:
+            - name: registry-pull-secret
+
+          containers:
+            - name: claude-agent
+              image: registry.example.com/platform/claude-agent:v0.0.4
+              imagePullPolicy: Always
+
+              env:
+                # ---------- Kubernetes targeting ----------
+                - name: NAMESPACES
+                  value: "apps-stg,observability,monitoring"
+                - name: STAGE_LABEL_SELECTOR
+                  value: ""
+                - name: USE_IN_CLUSTER
+                  value: "true"
+
+                # ---------- Schedule (run once per job invocation) ----------
+                - name: RUN_ONCE
+                  value: "true"
+
+                # ---------- Claude ----------
+                - name: CLAUDE_MODEL
+                  value: "claude-sonnet-5"
+                - name: CLAUDE_MAX_TOKENS
+                  value: "8192"
+
+                # ---------- Teams Reply Polling ----------
+                - name: TEAMS_REPLY_TIMEOUT
+                  value: "300"
+                - name: TEAMS_POLL_INTERVAL
+                  value: "10"
+
+                # ---------- Observability (Prometheus + Loki + Tempo) ----------
+                - name: PROMETHEUS_URL
+                  value: "http://prom-stack-kube-prometheus-prometheus.observability:9090"
+                - name: LOKI_URL
+                  value: "http://loki-stack.observability:3100"
+                - name: LOKI_LOOKBACK_HOURS
+                  value: "1"
+                - name: LOKI_MAX_LINES
+                  value: "200"
+                - name: TEMPO_URL
+                  value: "http://tempo.observability:3200"
+
+                # ---------- Limits ----------
+                - name: MAX_LOG_LINES
+                  value: "100"
+                - name: MAX_EVENTS
+                  value: "20"
+
+                # ---------- Secrets (from Kubernetes Secret) ----------
+                - name: MS_TEAMS_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-agent-secrets
+                      key: MS_TEAMS_WEBHOOK_URL
+                      optional: true
+                - name: ANTHROPIC_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-agent-secrets
+                      key: ANTHROPIC_API_KEY
+                - name: MS_GRAPH_TENANT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-agent-secrets
+                      key: MS_GRAPH_TENANT_ID
+                - name: MS_GRAPH_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-agent-secrets
+                      key: MS_GRAPH_CLIENT_ID
+                - name: MS_GRAPH_REFRESH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-agent-secrets
+                      key: MS_GRAPH_REFRESH_TOKEN
+                - name: MS_GRAPH_TEAM_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-agent-secrets
+                      key: MS_GRAPH_TEAM_ID
+                - name: MS_GRAPH_CHANNEL_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-agent-secrets
+                      key: MS_GRAPH_CHANNEL_ID
+
+                # ---------- GitOps-first remediation (opt-in — see agent/gitops_remediation.py) ----------
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: claude-agent-secrets
+                      key: GITHUB_TOKEN
+                      optional: true
+                # JSON map "<namespace>/<ingress-name>" -> {repo, path, yaml_path, base_branch}.
+                # Empty by default — no mapping means this feature is a complete no-op.
+                - name: GITOPS_REPO_MAP
+                  value: ""
+
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "256Mi"
+
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 10001
+                capabilities:
+                  drop: ["ALL"]

@@ -1,0 +1,27 @@
+prometheus-postgres-exporter:
+  # Credentials are stored in a K8s secret. Create it once before deploying:
+  #
+  #   kubectl create secret generic postgres-exporter-credentials \
+  #     -n observability \
+  #     --from-literal=DATA_SOURCE_NAME="postgresql://exporter:<exporter-password>@postgres.example.svc:5432/postgres?sslmode=disable"
+  #
+  config:
+    datasourceSecret:
+      name: postgres-exporter-credentials
+      key: DATA_SOURCE_NAME
+
+  serviceMonitor:
+    enabled: true
+    namespace: observability
+    labels:
+      release: prom-stack
+    interval: 30s
+    scrapeTimeout: 10s
+
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

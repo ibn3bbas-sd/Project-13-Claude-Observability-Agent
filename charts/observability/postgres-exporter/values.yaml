@@ -1,0 +1,3 @@
+prometheus-postgres-exporter:
+  serviceMonitor:
+    enabled: true

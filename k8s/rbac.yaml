@@ -1,0 +1,122 @@
+---
+# ServiceAccount for the monitor
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: claude-agent
+  namespace: monitoring          # deploy the agent itself here
+  labels:
+    app: claude-agent
+
+---
+# ClusterRole: read-only access to relevant resources across all namespaces
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: claude-agent
+  labels:
+    app: claude-agent
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - events
+      - namespaces
+      - persistentvolumeclaims
+      - persistentvolumes
+      - nodes
+    verbs: ["get", "list", "watch"]
+  # StorageClasses — PVC/SC health checks (agent/storage_checker.py): SC existence,
+  # default SC, allowVolumeExpansion, volumeBindingMode
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources:
+      - services
+    verbs: ["create", "patch"]
+  # Allow deleting pods so the agent can force-restart a crashed pod on command
+  - apiGroups: [""]
+    resources:
+      - pods
+    verbs: ["delete"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+    verbs: ["get", "list", "watch"]
+  # Allow patching deployments so the agent can rollout-restart, scale, or set-image on command
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+    verbs: ["patch", "update"]
+  - apiGroups: ["apps"]
+    resources:
+      - deployments/scale
+    verbs: ["get", "patch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch", "patch"]
+
+---
+# Role: allow patching claude-agent-secrets and managing the cooldown ConfigMap
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: claude-agent-secret-writer
+  namespace: monitoring
+  labels:
+    app: claude-agent
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["claude-agent-secrets"]
+    verbs: ["get", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]                         # create cannot use resourceNames in K8s RBAC
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["claude-agent-cooldown", "claude-agent-outcomes"]
+    verbs: ["get", "patch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: claude-agent-secret-writer
+  namespace: monitoring
+  labels:
+    app: claude-agent
+subjects:
+  - kind: ServiceAccount
+    name: claude-agent
+    namespace: monitoring
+roleRef:
+  kind: Role
+  name: claude-agent-secret-writer
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Bind the ClusterRole to the ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: claude-agent
+  labels:
+    app: claude-agent
+subjects:
+  - kind: ServiceAccount
+    name: claude-agent
+    namespace: monitoring
+roleRef:
+  kind: ClusterRole
+  name: claude-agent
+  apiGroup: rbac.authorization.k8s.io

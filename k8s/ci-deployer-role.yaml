@@ -1,0 +1,40 @@
+---
+# Grant the GitHub Actions runner (ci-deployer) the minimum permissions
+# needed to deploy and verify the CronJob in the monitoring namespace.
+#
+# Apply this ONCE by a cluster admin before the first CI deploy:
+#   kubectl apply -f k8s/ci-deployer-role.yaml
+#
+# This file is a cluster prerequisite applied once by an admin — not by CI.
+# The deploy workflow uses Helm to manage the CronJob; this Role grants
+# the CI runner (ci-deployer SA) permission to get/create/patch CronJobs.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ci-deployer-monitoring
+  namespace: monitoring
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["get", "create", "patch", "update", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["serviceaccounts", "configmaps"]
+    verbs: ["get", "list", "create", "update", "patch", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-deployer-monitoring
+  namespace: monitoring
+subjects:
+  - kind: ServiceAccount
+    name: ci-deployer
+    namespace: actions-runner-system
+roleRef:
+  kind: Role
+  name: ci-deployer-monitoring
+  apiGroup: rbac.authorization.k8s.io

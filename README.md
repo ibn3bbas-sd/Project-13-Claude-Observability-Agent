@@ -12,7 +12,10 @@ A production-ready monitoring agent for Oracle Kubernetes Engine (OKE) that:
 
 ## Architecture
 
-![Architecture](architecture.png)
+![Architecture — high-level design](docs/architecture/architecture.svg)
+
+The diagram is a theme-aware SVG (light/dark) generated from code — edit and re-run
+`python3 docs/architecture/generate_architecture.py` rather than editing the SVG by hand.
 
 ### Key components
 

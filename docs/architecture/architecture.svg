@@ -1,0 +1,665 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-label="Claude Observability Agent high-level design on OCI OKE">
+<style>.theme-dark{display:none}@media (prefers-color-scheme: dark){.theme-light{display:none}.theme-dark{display:inline}}</style>
+<defs><pattern id="dots-lt" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="1.2" cy="1.2" r="1.2" fill="#eef1f4"/></pattern></defs>
+<g class="theme-light"><defs><marker id="ah-lt-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0969da"/></marker><marker id="ah-lt-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#bc4c00"/></marker><marker id="ah-lt-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1a7f37"/></marker><marker id="ah-lt-gray" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6e7781"/></marker><marker id="ah-lt-purple" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8250df"/></marker><marker id="ah-lt-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1b7c83"/></marker></defs>
+<rect width="1920" height="1080" fill="#ffffff"/>
+<rect width="1920" height="1080" fill="url(#dots-lt)"/>
+<text x="48" y="52" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="30" font-weight="700" fill="#1f2328" text-anchor="start">Claude Observability Agent — High-Level Design (HLD)</text>
+<text x="48" y="78" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="15.5" font-weight="400" fill="#57606a" text-anchor="start">AI-assisted SRE for Oracle Kubernetes Engine · CronJob every 5 min · detect → collect → pre-pass → Claude tool-use analysis → Teams approval → remediate · a human approves every mutation</text>
+<text x="1880" y="52" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#8c959f" text-anchor="end">FHD 1920 × 1080</text>
+<text x="1880" y="74" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="400" fill="#8c959f" text-anchor="end">v1 · theme-aware</text>
+<line x1="48" y1="96" x2="1880" y2="96" stroke="#d0d7de" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
+<rect x="320" y="340" width="1120" height="680" rx="14" ry="14" fill="#cf222e" fill-opacity="0.025" stroke="#cf222e" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="342" y="458" width="1076" height="548" rx="14" ry="14" fill="#bc4c00" fill-opacity="0.025" stroke="#bc4c00" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="392" y="504" width="1006" height="176" rx="14" ry="14" fill="#0969da" fill-opacity="0.025" stroke="#0969da" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="392" y="712" width="1006" height="136" rx="14" ry="14" fill="#1a7f37" fill-opacity="0.025" stroke="#1a7f37" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="392" y="880" width="232" height="112" rx="14" ry="14" fill="#6e7781" fill-opacity="0.025" stroke="#6e7781" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="642" y="880" width="756" height="112" rx="14" ry="14" fill="#8250df" fill-opacity="0.025" stroke="#8250df" stroke-width="1.6" stroke-dasharray="8 6"/>
+<path d="M510,258 L510,372" fill="none" stroke="#0969da" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-blue)"/>
+<text x="520" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#0969da" text-anchor="start" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">HTTPS 443 · Grafana</text>
+<path d="M720,258 L720,456" fill="none" stroke="#1a7f37" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#ah-lt-green)"/>
+<text x="730" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#1a7f37" text-anchor="start" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">image pull</text>
+<path d="M978,258 L978,552" fill="none" stroke="#bc4c00" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-start="url(#ah-lt-orange)" marker-end="url(#ah-lt-orange)"/>
+<text x="968" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#bc4c00" text-anchor="end" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">Messages API · tool use</text>
+<path d="M1142,258 L1142,552" fill="none" stroke="#bc4c00" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-start="url(#ah-lt-orange)" marker-end="url(#ah-lt-orange)"/>
+<text x="1132" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#bc4c00" text-anchor="end" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">Graph · cards + replies</text>
+<path d="M1306,552 L1306,258" fill="none" stroke="#bc4c00" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#ah-lt-orange)"/>
+<text x="1296" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#bc4c00" text-anchor="end" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">GitOps PR</text>
+<path d="M560,597 L574,597" fill="none" stroke="#6e7781" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-gray)"/>
+<path d="M724,597 L738,597" fill="none" stroke="#6e7781" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-gray)"/>
+<path d="M888,597 L902,597" fill="none" stroke="#6e7781" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-gray)"/>
+<path d="M1052,597 L1066,597" fill="none" stroke="#6e7781" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-gray)"/>
+<path d="M1216,597 L1230,597" fill="none" stroke="#6e7781" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-gray)"/>
+<path d="M400,404 L358,404 L358,936 L406,936" fill="none" stroke="#0969da" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-blue)"/>
+<text transform="rotate(-90 353 610)" x="353" y="610" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#0969da" text-anchor="middle" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">HTTP :80 → ingress</text>
+<path d="M508,904 L508,834" fill="none" stroke="#0969da" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-blue)"/>
+<text x="500" y="862" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#0969da" text-anchor="end" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">host routing</text>
+<path d="M944,645 L944,760" fill="none" stroke="#6e7781" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-gray)"/>
+<text x="952" y="700" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6e7781" text-anchor="start" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">PromQL · LogQL · TraceQL (live tools)</text>
+<path d="M1306,647 L1306,690 L1390,690 L1390,948 L1365,948" fill="none" stroke="#8250df" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-purple)"/>
+<text transform="rotate(-90 1408 790)" x="1408" y="790" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#8250df" text-anchor="middle" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">approved kubectl</text>
+<path d="M486,647 L486,690 L600,690 L600,866 L633,866 L633,925 L662,925" fill="none" stroke="#6e7781" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#ah-lt-gray)" marker-end="url(#ah-lt-gray)"/>
+<text x="592" y="862" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6e7781" text-anchor="end" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">K8s API</text>
+<path d="M1093,904 L1093,834" fill="none" stroke="#1b7c83" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-teal)"/>
+<text x="1085" y="864" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#1b7c83" text-anchor="end" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">OTLP :4318</text>
+<path d="M740,904 L740,834" fill="none" stroke="#6e7781" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-gray)"/>
+<text x="748" y="864" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#6e7781" text-anchor="start" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">logs · metrics</text>
+<rect x="484" y="150" width="52" height="52" rx="8" fill="#0969da"/>
+<g transform="translate(510.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="-3" cy="-4" r="4.5"/><path d="M-11,9 C-11,2 5,2 5,9"/><circle cx="7" cy="-2" r="3.2"/><path d="M6,4 C10,4 12,6 12,9"/></g>
+<text x="510" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">Engineers / on-call</text>
+<text x="510" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="middle">browser · Teams client</text>
+<rect x="694" y="150" width="52" height="52" rx="8" fill="#1a7f37"/>
+<g transform="translate(720.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-10 L10,-5 L10,6 L0,11 L-10,6 L-10,-5 z"/><path d="M-10,-5 L0,0 L10,-5"/><path d="M0,0 v11"/></g>
+<text x="720" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">Container registry</text>
+<text x="720" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="middle">registry.example.com/platform</text>
+<rect x="952" y="150" width="52" height="52" rx="8" fill="#bc4c00"/>
+<g transform="translate(978.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-11 C1,-3 3,-1 11,0 C3,1 1,3 0,11 C-1,3 -3,1 -11,0 C-3,-1 -1,-3 0,-11 z"/></g>
+<text x="978" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">Anthropic Claude</text>
+<text x="978" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="middle">RCA + remediation plan</text>
+<rect x="1116" y="150" width="52" height="52" rx="8" fill="#8250df"/>
+<g transform="translate(1142.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-8 h20 a2,2 0 0 1 2,2 v11 a2,2 0 0 1 -2,2 h-11 l-6,5 v-5 h-3 a2,2 0 0 1 -2,-2 v-11 a2,2 0 0 1 2,-2 z"/><path d="M-5,-1 h10"/></g>
+<text x="1142" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">Microsoft Teams</text>
+<text x="1142" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="middle">alerts · @mention approve</text>
+<rect x="1280" y="150" width="52" height="52" rx="8" fill="#6e7781"/>
+<g transform="translate(1306.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="-6" cy="-8" r="2.8"/><circle cx="-6" cy="8" r="2.8"/><circle cx="7" cy="-3" r="2.8"/><path d="M-6,-5 v10"/><path d="M7,0 C7,5 -6,3 -6,5"/></g>
+<text x="1306" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="middle">GitHub</text>
+<text x="1306" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="middle">Actions CI · chart PRs</text>
+<rect x="400" y="372" width="222" height="64" rx="10" ry="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+<rect x="412" y="384" width="34" height="34" rx="8" fill="#0969da"/>
+<g transform="translate(429.0,401.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="-7" r="3.5"/><circle cx="-8" cy="8" r="3"/><circle cx="8" cy="8" r="3"/><circle cx="0" cy="8" r="3"/><path d="M0,-3.5 V5 M-2,-4 L-7,5 M2,-4 L7,5"/></g>
+<text x="456" y="399" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Public load balancer</text>
+<text x="456" y="416" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">stg-public-lb · TLS ends here</text>
+<rect x="780" y="372" width="168" height="64" rx="10" ry="10" fill="#ffffff" stroke="#cf222e" stroke-width="1.4"/>
+<rect x="792" y="384" width="34" height="34" rx="8" fill="#cf222e"/>
+<g transform="translate(809.0,401.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="-8" y="-2" width="16" height="12" rx="2"/><path d="M-5,-2 v-4 a5,5 0 0 1 10,0 v4"/></g>
+<text x="836" y="399" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">OCI Bastion</text>
+<text x="836" y="416" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">port-forward :6443</text>
+<rect x="412" y="548" width="148" height="98" rx="10" ry="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+<rect x="424" y="560" width="34" height="34" rx="8" fill="#0969da"/>
+<g transform="translate(441.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,1 h6 l3,-8 l5,15 l3,-7 h7"/></g>
+<text x="468" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Detect</text>
+<text x="468" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">health · storage</text>
+<text x="426" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">pods · PVC · svc</text>
+<text x="426" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">ingress · node runtime</text>
+<rect x="576" y="548" width="148" height="98" rx="10" ry="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+<rect x="588" y="560" width="34" height="34" rx="8" fill="#0969da"/>
+<g transform="translate(605.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-10 L11,-4 L0,2 L-11,-4 z"/><path d="M-11,1 L0,7 L11,1"/><path d="M-11,6 L0,12 L11,6"/></g>
+<text x="632" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Collect</text>
+<text x="632" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">context + logs</text>
+<text x="590" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">events · logs · timeline</text>
+<text x="590" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">kubectl-logs fallback</text>
+<rect x="740" y="548" width="148" height="98" rx="10" ry="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+<rect x="752" y="560" width="34" height="34" rx="8" fill="#0969da"/>
+<g transform="translate(769.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-7 h4 M-10,0 h4 M-10,7 h4"/><path d="M-2,-7 h12 M-2,0 h12 M-2,7 h12"/></g>
+<text x="796" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Pre-pass</text>
+<text x="796" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">deterministic</text>
+<text x="754" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">OOM · rollout · PVC full</text>
+<text x="754" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">known signatures</text>
+<rect x="904" y="548" width="148" height="98" rx="10" ry="10" fill="#ffffff" stroke="#bc4c00" stroke-width="1.4"/>
+<rect x="916" y="560" width="34" height="34" rx="8" fill="#bc4c00"/>
+<g transform="translate(933.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-11 C1,-3 3,-1 11,0 C3,1 1,3 0,11 C-1,3 -3,1 -11,0 C-3,-1 -1,-3 0,-11 z"/></g>
+<text x="960" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Analyze</text>
+<text x="960" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">Claude + tools</text>
+<text x="918" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">agentic tool loop</text>
+<text x="918" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">5 live tools · JSON out</text>
+<rect x="1068" y="548" width="148" height="98" rx="10" ry="10" fill="#ffffff" stroke="#8250df" stroke-width="1.4"/>
+<rect x="1080" y="560" width="34" height="34" rx="8" fill="#8250df"/>
+<g transform="translate(1097.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-8 h20 a2,2 0 0 1 2,2 v11 a2,2 0 0 1 -2,2 h-11 l-6,5 v-5 h-3 a2,2 0 0 1 -2,-2 v-11 a2,2 0 0 1 2,-2 z"/><path d="M-5,-1 h10"/></g>
+<text x="1124" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Notify</text>
+<text x="1124" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">Teams cards</text>
+<text x="1082" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">Adaptive Card thread</text>
+<text x="1082" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">polls @mention replies</text>
+<rect x="1232" y="548" width="148" height="98" rx="10" ry="10" fill="#ffffff" stroke="#8250df" stroke-width="1.4"/>
+<rect x="1244" y="560" width="34" height="34" rx="8" fill="#8250df"/>
+<g transform="translate(1261.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="-11" y="-9" width="22" height="18" rx="2"/><path d="M-6,-3 l4,3 l-4,3 M1,4 h5"/></g>
+<text x="1288" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Remediate</text>
+<text x="1288" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">policy executor</text>
+<text x="1246" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">allow-list · dry-run</text>
+<text x="1246" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">post-check verifies</text>
+<text x="636" y="670" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#57606a" text-anchor="start" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">state → ConfigMaps claude-agent-cooldown · claude-agent-outcomes (last 50)</text>
+<rect x="412" y="756" width="180" height="76" rx="10" ry="10" fill="#ffffff" stroke="#cf222e" stroke-width="1.4"/>
+<rect x="424" y="768" width="34" height="34" rx="8" fill="#cf222e"/>
+<g transform="translate(441.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,10 h20"/><path d="M-7,8 v-6 M-2,8 v-12 M3,8 v-8 M8,8 v-15"/></g>
+<text x="468" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Prometheus</text>
+<text x="468" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">kube-prom-stack</text>
+<text x="426" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">50 Gi PV · remote-write rx</text>
+<rect x="609" y="756" width="180" height="76" rx="10" ry="10" fill="#ffffff" stroke="#9a6700" stroke-width="1.4"/>
+<rect x="621" y="768" width="34" height="34" rx="8" fill="#9a6700"/>
+<g transform="translate(638.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-8,-11 h11 l6,6 v16 h-17 z"/><path d="M-4,-2 h9 M-4,3 h9 M-4,8 h6"/></g>
+<text x="665" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Loki 3.x</text>
+<text x="665" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">with Promtail</text>
+<text x="623" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">TSDB v13 · compactor</text>
+<rect x="806" y="756" width="180" height="76" rx="10" ry="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+<rect x="818" y="768" width="34" height="34" rx="8" fill="#0969da"/>
+<g transform="translate(835.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-11,-7 h12 M-6,-1 h12 M-2,5 h12 M-11,-10 v20"/></g>
+<text x="862" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Tempo</text>
+<text x="862" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">+ metrics-gen</text>
+<text x="820" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">TraceQL · rate()</text>
+<rect x="1003" y="756" width="180" height="76" rx="10" ry="10" fill="#ffffff" stroke="#1b7c83" stroke-width="1.4"/>
+<rect x="1015" y="768" width="34" height="34" rx="8" fill="#1b7c83"/>
+<g transform="translate(1032.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="3.5"/><circle cx="-9" cy="-7" r="2.2"/><circle cx="9" cy="-7" r="2.2"/><circle cx="0" cy="10" r="2.2"/><path d="M-3,-2 L-7,-5 M3,-2 L7,-5 M0,3.5 V8"/></g>
+<text x="1059" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">OTel Collector</text>
+<text x="1059" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">OTLP :4317/:4318</text>
+<text x="1017" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">pipeline, not a datasource</text>
+<rect x="1200" y="756" width="180" height="76" rx="10" ry="10" fill="#ffffff" stroke="#bc4c00" stroke-width="1.4"/>
+<rect x="1212" y="768" width="34" height="34" rx="8" fill="#bc4c00"/>
+<g transform="translate(1229.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-11,5 a11,11 0 0 1 22,0"/><path d="M0,5 L6,-4"/><circle cx="0" cy="5" r="1.6"/></g>
+<text x="1256" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Grafana</text>
+<text x="1256" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">dashboards</text>
+<text x="1214" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">Drilldown · Prom/Loki/Tempo</text>
+<rect x="408" y="906" width="200" height="70" rx="10" ry="10" fill="#ffffff" stroke="#0969da" stroke-width="1.4"/>
+<rect x="420" y="918" width="34" height="34" rx="8" fill="#0969da"/>
+<g transform="translate(437.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-11,0 h8 M-3,0 C2,0 2,-7 8,-7 M-3,0 C2,0 2,7 8,7"/><path d="M5,-10 l4,3 l-4,3 M5,4 l4,3 l-4,3"/></g>
+<text x="464" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">ingress-nginx</text>
+<text x="464" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">ns ingress-nginx</text>
+<text x="422" y="964" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#8c959f" text-anchor="start">*-stg.example.com hosts</text>
+<rect x="664" y="906" width="166" height="70" rx="10" ry="10" fill="#ffffff" stroke="#8250df" stroke-width="1.4"/>
+<rect x="676" y="918" width="34" height="34" rx="8" fill="#8250df"/>
+<g transform="translate(693.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-10 L10,-5 L10,6 L0,11 L-10,6 L-10,-5 z"/><path d="M-10,-5 L0,0 L10,-5"/><path d="M0,0 v11"/></g>
+<text x="720" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Workloads</text>
+<text x="720" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">Deploy · STS · Pods</text>
+<rect x="842" y="906" width="166" height="70" rx="10" ry="10" fill="#ffffff" stroke="#8250df" stroke-width="1.4"/>
+<rect x="854" y="918" width="34" height="34" rx="8" fill="#8250df"/>
+<g transform="translate(871.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="9"/><path d="M-9,0 h18 M0,-9 C-5,-4 -5,4 0,9 M0,-9 C5,-4 5,4 0,9"/></g>
+<text x="898" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Services</text>
+<text x="898" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">endpoints · ports</text>
+<rect x="1020" y="906" width="166" height="70" rx="10" ry="10" fill="#ffffff" stroke="#8250df" stroke-width="1.4"/>
+<rect x="1032" y="918" width="34" height="34" rx="8" fill="#8250df"/>
+<g transform="translate(1049.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-11,0 h8 M-3,0 C2,0 2,-7 8,-7 M-3,0 C2,0 2,7 8,7"/><path d="M5,-10 l4,3 l-4,3 M5,4 l4,3 l-4,3"/></g>
+<text x="1076" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">Ingress</text>
+<text x="1076" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">class · TLS · hosts</text>
+<rect x="1198" y="906" width="166" height="70" rx="10" ry="10" fill="#ffffff" stroke="#8250df" stroke-width="1.4"/>
+<rect x="1210" y="918" width="34" height="34" rx="8" fill="#8250df"/>
+<g transform="translate(1227.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="0" cy="-7" rx="9" ry="3.5"/><path d="M-9,-7 v14 a9,3.5 0 0 0 18,0 v-14"/><path d="M-9,0 a9,3.5 0 0 0 18,0"/></g>
+<text x="1254" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#1f2328" text-anchor="start">PVCs</text>
+<text x="1254" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">oci-bv · usage</text>
+<rect x="48" y="140" width="250" height="452" rx="12" ry="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4"/>
+<text x="66" y="172" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="16.5" font-weight="700" fill="#1f2328" text-anchor="start">At a glance</text>
+<circle cx="68" cy="186" r="2.8" fill="#0969da"/>
+<text x="80" y="190" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Runs as a CronJob every 5 min,</text>
+<text x="80" y="204" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">no overlap, backoffLimit 0</text>
+<circle cx="68" cy="220" r="2.8" fill="#0969da"/>
+<text x="80" y="224" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Cheap deterministic checks first;</text>
+<text x="80" y="238" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">Claude only for unhealthy services</text>
+<circle cx="68" cy="254" r="2.8" fill="#0969da"/>
+<text x="80" y="258" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Claude investigates live with</text>
+<text x="80" y="272" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">PromQL, LogQL, Tempo, describe,</text>
+<text x="80" y="286" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">events (agentic tool loop)</text>
+<circle cx="68" cy="302" r="2.8" fill="#0969da"/>
+<text x="80" y="306" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Every mutating command needs a</text>
+<text x="80" y="320" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">human @mention reply in Teams</text>
+<circle cx="68" cy="336" r="2.8" fill="#0969da"/>
+<text x="80" y="340" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Tier-2 patches are server-side</text>
+<text x="80" y="354" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">dry-run validated before applying</text>
+<circle cx="68" cy="370" r="2.8" fill="#0969da"/>
+<text x="80" y="374" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Outcomes are stored; next prompt</text>
+<text x="80" y="388" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">prefers fixes that worked</text>
+<circle cx="68" cy="404" r="2.8" fill="#0969da"/>
+<text x="80" y="408" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Helm-owned drift → a PR to the</text>
+<text x="80" y="422" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">chart values, not a live patch</text>
+<circle cx="68" cy="438" r="2.8" fill="#0969da"/>
+<text x="80" y="442" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Per-service cooldown stops</text>
+<text x="80" y="456" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">alert storms</text>
+<circle cx="68" cy="472" r="2.8" fill="#0969da"/>
+<text x="80" y="476" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">The agent has no ingress at all —</text>
+<text x="80" y="490" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">outbound calls only</text>
+<circle cx="68" cy="506" r="2.8" fill="#0969da"/>
+<text x="80" y="510" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#1f2328" text-anchor="start">Degrades gracefully: Loki down →</text>
+<text x="80" y="524" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#57606a" text-anchor="start">kubectl logs fallback</text>
+<rect x="48" y="612" width="250" height="196" rx="12" ry="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4"/>
+<text x="66" y="644" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="16.5" font-weight="700" fill="#1f2328" text-anchor="start">Detection coverage</text>
+<text x="66" y="662" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="start">checks per area</text>
+<text x="66" y="688" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#1f2328" text-anchor="start">Pods</text>
+<rect x="158" y="678" width="110" height="10" rx="5" ry="5" fill="#eaeef2" stroke="#eaeef2" stroke-width="0"/>
+<rect x="158" y="678" width="110.0" height="10" rx="5" ry="5" fill="#0969da" stroke="#0969da" stroke-width="0"/>
+<text x="280" y="688" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#57606a" text-anchor="end">11</text>
+<text x="66" y="712" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#1f2328" text-anchor="start">Ingress</text>
+<rect x="158" y="702" width="110" height="10" rx="5" ry="5" fill="#eaeef2" stroke="#eaeef2" stroke-width="0"/>
+<rect x="158" y="702" width="100.0" height="10" rx="5" ry="5" fill="#8250df" stroke="#8250df" stroke-width="0"/>
+<text x="280" y="712" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#57606a" text-anchor="end">10</text>
+<text x="66" y="736" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#1f2328" text-anchor="start">Services</text>
+<rect x="158" y="726" width="110" height="10" rx="5" ry="5" fill="#eaeef2" stroke="#eaeef2" stroke-width="0"/>
+<rect x="158" y="726" width="60.0" height="10" rx="5" ry="5" fill="#1a7f37" stroke="#1a7f37" stroke-width="0"/>
+<text x="280" y="736" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#57606a" text-anchor="end">6</text>
+<text x="66" y="760" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#1f2328" text-anchor="start">Storage</text>
+<rect x="158" y="750" width="110" height="10" rx="5" ry="5" fill="#eaeef2" stroke="#eaeef2" stroke-width="0"/>
+<rect x="158" y="750" width="60.0" height="10" rx="5" ry="5" fill="#9a6700" stroke="#9a6700" stroke-width="0"/>
+<text x="280" y="760" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#57606a" text-anchor="end">6</text>
+<text x="66" y="784" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#1f2328" text-anchor="start">Node runtime</text>
+<rect x="158" y="774" width="110" height="10" rx="5" ry="5" fill="#eaeef2" stroke="#eaeef2" stroke-width="0"/>
+<rect x="158" y="774" width="10.0" height="10" rx="5" ry="5" fill="#cf222e" stroke="#cf222e" stroke-width="0"/>
+<text x="280" y="784" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#57606a" text-anchor="end">1</text>
+<rect x="48" y="828" width="250" height="192" rx="12" ry="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4"/>
+<text x="66" y="860" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="16.5" font-weight="700" fill="#1f2328" text-anchor="start">Safety model</text>
+<text x="66" y="878" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="start">read wide, write narrow</text>
+<text x="66" y="900" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#1a7f37" text-anchor="start">Tier 1 · runs once approved</text>
+<text x="66" y="917" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#57606a" text-anchor="start">rollout restart · scale · delete pod</text>
+<text x="66" y="942" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#bc4c00" text-anchor="start">Tier 2 · dry-run, then apply</text>
+<text x="66" y="959" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#57606a" text-anchor="start">set image · patch deploy/svc/ingress</text>
+<text x="66" y="984" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#cf222e" text-anchor="start">Anything else → not executed</text>
+<text x="66" y="1001" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#57606a" text-anchor="start">read-only verbs only (get · logs · exec)</text>
+<rect x="1466" y="120" width="414" height="900" rx="12" ry="12" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4"/>
+<text x="1484" y="152" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="16.5" font-weight="700" fill="#1f2328" text-anchor="start">Abbreviations</text>
+<text x="1484" y="168" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="start">every acronym used in this diagram</text>
+<text x="1490" y="200" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#57606a" text-anchor="start">PLATFORM</text>
+<rect x="1490" y="213" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="224" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">OCI</text>
+<text x="1594" y="224" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Oracle Cloud Infrastructure</text>
+<rect x="1490" y="236" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="247" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">OKE</text>
+<text x="1594" y="247" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Oracle Kubernetes Engine</text>
+<rect x="1490" y="259" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="270" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">LB</text>
+<text x="1594" y="270" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Load Balancer</text>
+<rect x="1490" y="282" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="293" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">STS</text>
+<text x="1594" y="293" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">StatefulSet</text>
+<rect x="1490" y="305" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="316" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">PVC / PV</text>
+<text x="1594" y="316" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Persistent Volume (Claim)</text>
+<rect x="1490" y="328" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="339" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">oci-bv</text>
+<text x="1594" y="339" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">OCI Block Volume CSI StorageClass</text>
+<text x="1490" y="374" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#57606a" text-anchor="start">OBSERVABILITY</text>
+<rect x="1490" y="387" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="398" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">OTLP</text>
+<text x="1594" y="398" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">OpenTelemetry Protocol</text>
+<rect x="1490" y="410" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="421" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">PromQL</text>
+<text x="1594" y="421" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Prometheus query language</text>
+<rect x="1490" y="433" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="444" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">LogQL</text>
+<text x="1594" y="444" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Loki query language</text>
+<rect x="1490" y="456" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="467" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">TraceQL</text>
+<text x="1594" y="467" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Tempo query language</text>
+<rect x="1490" y="479" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="490" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">TSDB</text>
+<text x="1594" y="490" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Time-Series Database (Loki index)</text>
+<rect x="1490" y="502" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="513" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">DS</text>
+<text x="1594" y="513" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Grafana data source</text>
+<text x="1490" y="548" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#57606a" text-anchor="start">AGENT</text>
+<rect x="1490" y="561" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="572" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">RCA</text>
+<text x="1594" y="572" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Root-Cause Analysis</text>
+<rect x="1490" y="584" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="595" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">SA</text>
+<text x="1594" y="595" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">ServiceAccount (RBAC identity)</text>
+<rect x="1490" y="607" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">GitOps</text>
+<text x="1594" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Fix lands as a PR to chart values</text>
+<rect x="1490" y="630" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="641" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">Tier 1/2</text>
+<text x="1594" y="641" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Remediation blast-radius policy</text>
+<text x="1490" y="676" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#57606a" text-anchor="start">DOCUMENT</text>
+<rect x="1490" y="689" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="700" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">HLD</text>
+<text x="1594" y="700" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">High-Level Design</text>
+<rect x="1490" y="712" width="3" height="14" rx="1.5" fill="#bc4c00"/>
+<text x="1504" y="723" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#1f2328" text-anchor="start">FHD</text>
+<text x="1594" y="723" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Full HD — 1920 × 1080 px</text>
+<text x="1490" y="762" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#57606a" text-anchor="start">FLOW KEY</text>
+<path d="M1500,784 L1556,784" fill="none" stroke="#0969da" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-blue)"/>
+<text x="1580" y="788" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Ingress — users into the cluster</text>
+<path d="M1500,808 L1556,808" fill="none" stroke="#bc4c00" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#ah-lt-orange)"/>
+<text x="1580" y="812" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Egress — Claude, Teams, GitHub</text>
+<path d="M1500,832 L1556,832" fill="none" stroke="#1a7f37" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#ah-lt-green)"/>
+<text x="1580" y="836" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Supply — image pulls</text>
+<path d="M1500,856 L1556,856" fill="none" stroke="#1b7c83" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-teal)"/>
+<text x="1580" y="860" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Telemetry — OTLP traces</text>
+<path d="M1500,880 L1556,880" fill="none" stroke="#8250df" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-purple)"/>
+<text x="1580" y="884" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Remediation — approved commands only</text>
+<path d="M1500,904 L1556,904" fill="none" stroke="#6e7781" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-lt-gray)"/>
+<text x="1580" y="908" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Internal — reads / queries</text>
+<line x1="48" y1="1032" x2="1880" y2="1032" stroke="#d0d7de" stroke-width="1.2" stroke-linecap="round" opacity="0.9"/>
+<text x="48" y="1052" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#57606a" text-anchor="start">Loop: K8s API → detect → collect (events, Loki / kubectl logs, Tempo-correlated timeline) → pre-pass hints → Claude (live PromQL / LogQL / TraceQL) → Teams card → @mention approval → policy-checked kubectl → post-check → outcome stored</text>
+<text x="48" y="1070" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#8c959f" text-anchor="start">Read cluster-wide, write narrow · nothing mutates without a human · secrets stay in the cluster (claude-agent-secrets) · Helm-owned drift is fixed in Git, not in place</text>
+<rect x="334" y="325" width="220.0" height="30" rx="8" ry="8" fill="#ffffff" stroke="#cf222e" stroke-width="1.6"/>
+<circle cx="350" cy="340" r="5" fill="#cf222e"/>
+<text x="362" y="345" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#cf222e" text-anchor="start">OCI region · us-ashburn-1</text>
+<rect x="372" y="443" width="189.6" height="30" rx="8" ry="8" fill="#ffffff" stroke="#bc4c00" stroke-width="1.6"/>
+<circle cx="388" cy="458" r="5" fill="#bc4c00"/>
+<text x="400" y="463" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#bc4c00" text-anchor="start">OKE cluster · staging</text>
+<rect x="406" y="489" width="303.59999999999997" height="30" rx="8" ry="8" fill="#ffffff" stroke="#0969da" stroke-width="1.6"/>
+<circle cx="422" cy="504" r="5" fill="#0969da"/>
+<text x="434" y="509" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#0969da" text-anchor="start">namespace: monitoring · claude-agent</text>
+<text x="721.5999999999999" y="509" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#57606a" text-anchor="start" stroke="#ffffff" stroke-width="5" paint-order="stroke" stroke-linejoin="round">CronJob */5 · concurrencyPolicy Forbid · ServiceAccount claude-agent</text>
+<rect x="406" y="697" width="334.0" height="30" rx="8" ry="8" fill="#ffffff" stroke="#1a7f37" stroke-width="1.6"/>
+<circle cx="422" cy="712" r="5" fill="#1a7f37"/>
+<text x="434" y="717" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1a7f37" text-anchor="start">namespace: observability · Helm releases</text>
+<rect x="1118.4" y="865" width="265.6" height="30" rx="8" ry="8" fill="#ffffff" stroke="#8250df" stroke-width="1.6"/>
+<circle cx="1134.4" cy="880" r="5" fill="#8250df"/>
+<text x="1146.4" y="885" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#8250df" text-anchor="start">monitored namespaces · apps-stg</text></g>
+<defs><pattern id="dots-dk" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="1.2" cy="1.2" r="1.2" fill="#161b22"/></pattern></defs>
+<g class="theme-dark"><defs><marker id="ah-dk-blue" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4493f8"/></marker><marker id="ah-dk-orange" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f0883e"/></marker><marker id="ah-dk-green" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3fb950"/></marker><marker id="ah-dk-gray" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8b949e"/></marker><marker id="ah-dk-purple" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#ab7df8"/></marker><marker id="ah-dk-teal" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#39c5cf"/></marker></defs>
+<rect width="1920" height="1080" fill="#0d1117"/>
+<rect width="1920" height="1080" fill="url(#dots-dk)"/>
+<text x="48" y="52" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="30" font-weight="700" fill="#e6edf3" text-anchor="start">Claude Observability Agent — High-Level Design (HLD)</text>
+<text x="48" y="78" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="15.5" font-weight="400" fill="#9198a1" text-anchor="start">AI-assisted SRE for Oracle Kubernetes Engine · CronJob every 5 min · detect → collect → pre-pass → Claude tool-use analysis → Teams approval → remediate · a human approves every mutation</text>
+<text x="1880" y="52" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#6e7681" text-anchor="end">FHD 1920 × 1080</text>
+<text x="1880" y="74" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13.5" font-weight="400" fill="#6e7681" text-anchor="end">v1 · theme-aware</text>
+<line x1="48" y1="96" x2="1880" y2="96" stroke="#30363d" stroke-width="1.5" stroke-linecap="round" opacity="0.9"/>
+<rect x="320" y="340" width="1120" height="680" rx="14" ry="14" fill="#f85149" fill-opacity="0.025" stroke="#f85149" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="342" y="458" width="1076" height="548" rx="14" ry="14" fill="#f0883e" fill-opacity="0.025" stroke="#f0883e" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="392" y="504" width="1006" height="176" rx="14" ry="14" fill="#4493f8" fill-opacity="0.025" stroke="#4493f8" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="392" y="712" width="1006" height="136" rx="14" ry="14" fill="#3fb950" fill-opacity="0.025" stroke="#3fb950" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="392" y="880" width="232" height="112" rx="14" ry="14" fill="#8b949e" fill-opacity="0.025" stroke="#8b949e" stroke-width="1.6" stroke-dasharray="8 6"/>
+<rect x="642" y="880" width="756" height="112" rx="14" ry="14" fill="#ab7df8" fill-opacity="0.025" stroke="#ab7df8" stroke-width="1.6" stroke-dasharray="8 6"/>
+<path d="M510,258 L510,372" fill="none" stroke="#4493f8" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-blue)"/>
+<text x="520" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#4493f8" text-anchor="start" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">HTTPS 443 · Grafana</text>
+<path d="M720,258 L720,456" fill="none" stroke="#3fb950" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#ah-dk-green)"/>
+<text x="730" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#3fb950" text-anchor="start" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">image pull</text>
+<path d="M978,258 L978,552" fill="none" stroke="#f0883e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-start="url(#ah-dk-orange)" marker-end="url(#ah-dk-orange)"/>
+<text x="968" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#f0883e" text-anchor="end" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">Messages API · tool use</text>
+<path d="M1142,258 L1142,552" fill="none" stroke="#f0883e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-start="url(#ah-dk-orange)" marker-end="url(#ah-dk-orange)"/>
+<text x="1132" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#f0883e" text-anchor="end" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">Graph · cards + replies</text>
+<path d="M1306,552 L1306,258" fill="none" stroke="#f0883e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#ah-dk-orange)"/>
+<text x="1296" y="300" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="600" fill="#f0883e" text-anchor="end" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">GitOps PR</text>
+<path d="M560,597 L574,597" fill="none" stroke="#8b949e" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-gray)"/>
+<path d="M724,597 L738,597" fill="none" stroke="#8b949e" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-gray)"/>
+<path d="M888,597 L902,597" fill="none" stroke="#8b949e" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-gray)"/>
+<path d="M1052,597 L1066,597" fill="none" stroke="#8b949e" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-gray)"/>
+<path d="M1216,597 L1230,597" fill="none" stroke="#8b949e" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-gray)"/>
+<path d="M400,404 L358,404 L358,936 L406,936" fill="none" stroke="#4493f8" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-blue)"/>
+<text transform="rotate(-90 353 610)" x="353" y="610" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#4493f8" text-anchor="middle" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">HTTP :80 → ingress</text>
+<path d="M508,904 L508,834" fill="none" stroke="#4493f8" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-blue)"/>
+<text x="500" y="862" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#4493f8" text-anchor="end" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">host routing</text>
+<path d="M944,645 L944,760" fill="none" stroke="#8b949e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-gray)"/>
+<text x="952" y="700" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#8b949e" text-anchor="start" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">PromQL · LogQL · TraceQL (live tools)</text>
+<path d="M1306,647 L1306,690 L1390,690 L1390,948 L1365,948" fill="none" stroke="#ab7df8" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-purple)"/>
+<text transform="rotate(-90 1408 790)" x="1408" y="790" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#ab7df8" text-anchor="middle" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">approved kubectl</text>
+<path d="M486,647 L486,690 L600,690 L600,866 L633,866 L633,925 L662,925" fill="none" stroke="#8b949e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-start="url(#ah-dk-gray)" marker-end="url(#ah-dk-gray)"/>
+<text x="592" y="862" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#8b949e" text-anchor="end" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">K8s API</text>
+<path d="M1093,904 L1093,834" fill="none" stroke="#39c5cf" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-teal)"/>
+<text x="1085" y="864" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#39c5cf" text-anchor="end" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">OTLP :4318</text>
+<path d="M740,904 L740,834" fill="none" stroke="#8b949e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-gray)"/>
+<text x="748" y="864" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="600" fill="#8b949e" text-anchor="start" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">logs · metrics</text>
+<rect x="484" y="150" width="52" height="52" rx="8" fill="#4493f8"/>
+<g transform="translate(510.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="-3" cy="-4" r="4.5"/><path d="M-11,9 C-11,2 5,2 5,9"/><circle cx="7" cy="-2" r="3.2"/><path d="M6,4 C10,4 12,6 12,9"/></g>
+<text x="510" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Engineers / on-call</text>
+<text x="510" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">browser · Teams client</text>
+<rect x="694" y="150" width="52" height="52" rx="8" fill="#3fb950"/>
+<g transform="translate(720.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-10 L10,-5 L10,6 L0,11 L-10,6 L-10,-5 z"/><path d="M-10,-5 L0,0 L10,-5"/><path d="M0,0 v11"/></g>
+<text x="720" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Container registry</text>
+<text x="720" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">registry.example.com/platform</text>
+<rect x="952" y="150" width="52" height="52" rx="8" fill="#f0883e"/>
+<g transform="translate(978.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-11 C1,-3 3,-1 11,0 C3,1 1,3 0,11 C-1,3 -3,1 -11,0 C-3,-1 -1,-3 0,-11 z"/></g>
+<text x="978" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Anthropic Claude</text>
+<text x="978" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">RCA + remediation plan</text>
+<rect x="1116" y="150" width="52" height="52" rx="8" fill="#ab7df8"/>
+<g transform="translate(1142.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-8 h20 a2,2 0 0 1 2,2 v11 a2,2 0 0 1 -2,2 h-11 l-6,5 v-5 h-3 a2,2 0 0 1 -2,-2 v-11 a2,2 0 0 1 2,-2 z"/><path d="M-5,-1 h10"/></g>
+<text x="1142" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="middle">Microsoft Teams</text>
+<text x="1142" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">alerts · @mention approve</text>
+<rect x="1280" y="150" width="52" height="52" rx="8" fill="#8b949e"/>
+<g transform="translate(1306.0,176.0) scale(1.5294117647058822)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="-6" cy="-8" r="2.8"/><circle cx="-6" cy="8" r="2.8"/><circle cx="7" cy="-3" r="2.8"/><path d="M-6,-5 v10"/><path d="M7,0 C7,5 -6,3 -6,5"/></g>
+<text x="1306" y="222" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="middle">GitHub</text>
+<text x="1306" y="240" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="middle">Actions CI · chart PRs</text>
+<rect x="400" y="372" width="222" height="64" rx="10" ry="10" fill="#161b22" stroke="#4493f8" stroke-width="1.4"/>
+<rect x="412" y="384" width="34" height="34" rx="8" fill="#4493f8"/>
+<g transform="translate(429.0,401.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="-7" r="3.5"/><circle cx="-8" cy="8" r="3"/><circle cx="8" cy="8" r="3"/><circle cx="0" cy="8" r="3"/><path d="M0,-3.5 V5 M-2,-4 L-7,5 M2,-4 L7,5"/></g>
+<text x="456" y="399" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Public load balancer</text>
+<text x="456" y="416" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">stg-public-lb · TLS ends here</text>
+<rect x="780" y="372" width="168" height="64" rx="10" ry="10" fill="#161b22" stroke="#f85149" stroke-width="1.4"/>
+<rect x="792" y="384" width="34" height="34" rx="8" fill="#f85149"/>
+<g transform="translate(809.0,401.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="-8" y="-2" width="16" height="12" rx="2"/><path d="M-5,-2 v-4 a5,5 0 0 1 10,0 v4"/></g>
+<text x="836" y="399" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">OCI Bastion</text>
+<text x="836" y="416" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">port-forward :6443</text>
+<rect x="412" y="548" width="148" height="98" rx="10" ry="10" fill="#161b22" stroke="#4493f8" stroke-width="1.4"/>
+<rect x="424" y="560" width="34" height="34" rx="8" fill="#4493f8"/>
+<g transform="translate(441.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-12,1 h6 l3,-8 l5,15 l3,-7 h7"/></g>
+<text x="468" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Detect</text>
+<text x="468" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">health · storage</text>
+<text x="426" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">pods · PVC · svc</text>
+<text x="426" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">ingress · node runtime</text>
+<rect x="576" y="548" width="148" height="98" rx="10" ry="10" fill="#161b22" stroke="#4493f8" stroke-width="1.4"/>
+<rect x="588" y="560" width="34" height="34" rx="8" fill="#4493f8"/>
+<g transform="translate(605.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-10 L11,-4 L0,2 L-11,-4 z"/><path d="M-11,1 L0,7 L11,1"/><path d="M-11,6 L0,12 L11,6"/></g>
+<text x="632" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Collect</text>
+<text x="632" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">context + logs</text>
+<text x="590" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">events · logs · timeline</text>
+<text x="590" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">kubectl-logs fallback</text>
+<rect x="740" y="548" width="148" height="98" rx="10" ry="10" fill="#161b22" stroke="#4493f8" stroke-width="1.4"/>
+<rect x="752" y="560" width="34" height="34" rx="8" fill="#4493f8"/>
+<g transform="translate(769.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-7 h4 M-10,0 h4 M-10,7 h4"/><path d="M-2,-7 h12 M-2,0 h12 M-2,7 h12"/></g>
+<text x="796" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Pre-pass</text>
+<text x="796" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">deterministic</text>
+<text x="754" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">OOM · rollout · PVC full</text>
+<text x="754" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">known signatures</text>
+<rect x="904" y="548" width="148" height="98" rx="10" ry="10" fill="#161b22" stroke="#f0883e" stroke-width="1.4"/>
+<rect x="916" y="560" width="34" height="34" rx="8" fill="#f0883e"/>
+<g transform="translate(933.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-11 C1,-3 3,-1 11,0 C3,1 1,3 0,11 C-1,3 -3,1 -11,0 C-3,-1 -1,-3 0,-11 z"/></g>
+<text x="960" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Analyze</text>
+<text x="960" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">Claude + tools</text>
+<text x="918" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">agentic tool loop</text>
+<text x="918" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">5 live tools · JSON out</text>
+<rect x="1068" y="548" width="148" height="98" rx="10" ry="10" fill="#161b22" stroke="#ab7df8" stroke-width="1.4"/>
+<rect x="1080" y="560" width="34" height="34" rx="8" fill="#ab7df8"/>
+<g transform="translate(1097.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,-8 h20 a2,2 0 0 1 2,2 v11 a2,2 0 0 1 -2,2 h-11 l-6,5 v-5 h-3 a2,2 0 0 1 -2,-2 v-11 a2,2 0 0 1 2,-2 z"/><path d="M-5,-1 h10"/></g>
+<text x="1124" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Notify</text>
+<text x="1124" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">Teams cards</text>
+<text x="1082" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">Adaptive Card thread</text>
+<text x="1082" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">polls @mention replies</text>
+<rect x="1232" y="548" width="148" height="98" rx="10" ry="10" fill="#161b22" stroke="#ab7df8" stroke-width="1.4"/>
+<rect x="1244" y="560" width="34" height="34" rx="8" fill="#ab7df8"/>
+<g transform="translate(1261.0,577.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="-11" y="-9" width="22" height="18" rx="2"/><path d="M-6,-3 l4,3 l-4,3 M1,4 h5"/></g>
+<text x="1288" y="575" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Remediate</text>
+<text x="1288" y="592" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">policy executor</text>
+<text x="1246" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">allow-list · dry-run</text>
+<text x="1246" y="634" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">post-check verifies</text>
+<text x="636" y="670" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#9198a1" text-anchor="start" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">state → ConfigMaps claude-agent-cooldown · claude-agent-outcomes (last 50)</text>
+<rect x="412" y="756" width="180" height="76" rx="10" ry="10" fill="#161b22" stroke="#f85149" stroke-width="1.4"/>
+<rect x="424" y="768" width="34" height="34" rx="8" fill="#f85149"/>
+<g transform="translate(441.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-10,10 h20"/><path d="M-7,8 v-6 M-2,8 v-12 M3,8 v-8 M8,8 v-15"/></g>
+<text x="468" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Prometheus</text>
+<text x="468" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">kube-prom-stack</text>
+<text x="426" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">50 Gi PV · remote-write rx</text>
+<rect x="609" y="756" width="180" height="76" rx="10" ry="10" fill="#161b22" stroke="#d29922" stroke-width="1.4"/>
+<rect x="621" y="768" width="34" height="34" rx="8" fill="#d29922"/>
+<g transform="translate(638.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-8,-11 h11 l6,6 v16 h-17 z"/><path d="M-4,-2 h9 M-4,3 h9 M-4,8 h6"/></g>
+<text x="665" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Loki 3.x</text>
+<text x="665" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">with Promtail</text>
+<text x="623" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">TSDB v13 · compactor</text>
+<rect x="806" y="756" width="180" height="76" rx="10" ry="10" fill="#161b22" stroke="#4493f8" stroke-width="1.4"/>
+<rect x="818" y="768" width="34" height="34" rx="8" fill="#4493f8"/>
+<g transform="translate(835.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-11,-7 h12 M-6,-1 h12 M-2,5 h12 M-11,-10 v20"/></g>
+<text x="862" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Tempo</text>
+<text x="862" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">+ metrics-gen</text>
+<text x="820" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">TraceQL · rate()</text>
+<rect x="1003" y="756" width="180" height="76" rx="10" ry="10" fill="#161b22" stroke="#39c5cf" stroke-width="1.4"/>
+<rect x="1015" y="768" width="34" height="34" rx="8" fill="#39c5cf"/>
+<g transform="translate(1032.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="3.5"/><circle cx="-9" cy="-7" r="2.2"/><circle cx="9" cy="-7" r="2.2"/><circle cx="0" cy="10" r="2.2"/><path d="M-3,-2 L-7,-5 M3,-2 L7,-5 M0,3.5 V8"/></g>
+<text x="1059" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">OTel Collector</text>
+<text x="1059" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">OTLP :4317/:4318</text>
+<text x="1017" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">pipeline, not a datasource</text>
+<rect x="1200" y="756" width="180" height="76" rx="10" ry="10" fill="#161b22" stroke="#f0883e" stroke-width="1.4"/>
+<rect x="1212" y="768" width="34" height="34" rx="8" fill="#f0883e"/>
+<g transform="translate(1229.0,785.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-11,5 a11,11 0 0 1 22,0"/><path d="M0,5 L6,-4"/><circle cx="0" cy="5" r="1.6"/></g>
+<text x="1256" y="783" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Grafana</text>
+<text x="1256" y="800" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">dashboards</text>
+<text x="1214" y="820" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">Drilldown · Prom/Loki/Tempo</text>
+<rect x="408" y="906" width="200" height="70" rx="10" ry="10" fill="#161b22" stroke="#4493f8" stroke-width="1.4"/>
+<rect x="420" y="918" width="34" height="34" rx="8" fill="#4493f8"/>
+<g transform="translate(437.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-11,0 h8 M-3,0 C2,0 2,-7 8,-7 M-3,0 C2,0 2,7 8,7"/><path d="M5,-10 l4,3 l-4,3 M5,4 l4,3 l-4,3"/></g>
+<text x="464" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">ingress-nginx</text>
+<text x="464" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">ns ingress-nginx</text>
+<text x="422" y="964" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.2" font-weight="400" fill="#6e7681" text-anchor="start">*-stg.example.com hosts</text>
+<rect x="664" y="906" width="166" height="70" rx="10" ry="10" fill="#161b22" stroke="#ab7df8" stroke-width="1.4"/>
+<rect x="676" y="918" width="34" height="34" rx="8" fill="#ab7df8"/>
+<g transform="translate(693.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M0,-10 L10,-5 L10,6 L0,11 L-10,6 L-10,-5 z"/><path d="M-10,-5 L0,0 L10,-5"/><path d="M0,0 v11"/></g>
+<text x="720" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Workloads</text>
+<text x="720" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">Deploy · STS · Pods</text>
+<rect x="842" y="906" width="166" height="70" rx="10" ry="10" fill="#161b22" stroke="#ab7df8" stroke-width="1.4"/>
+<rect x="854" y="918" width="34" height="34" rx="8" fill="#ab7df8"/>
+<g transform="translate(871.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="0" cy="0" r="9"/><path d="M-9,0 h18 M0,-9 C-5,-4 -5,4 0,9 M0,-9 C5,-4 5,4 0,9"/></g>
+<text x="898" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Services</text>
+<text x="898" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">endpoints · ports</text>
+<rect x="1020" y="906" width="166" height="70" rx="10" ry="10" fill="#161b22" stroke="#ab7df8" stroke-width="1.4"/>
+<rect x="1032" y="918" width="34" height="34" rx="8" fill="#ab7df8"/>
+<g transform="translate(1049.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M-11,0 h8 M-3,0 C2,0 2,-7 8,-7 M-3,0 C2,0 2,7 8,7"/><path d="M5,-10 l4,3 l-4,3 M5,4 l4,3 l-4,3"/></g>
+<text x="1076" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">Ingress</text>
+<text x="1076" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">class · TLS · hosts</text>
+<rect x="1198" y="906" width="166" height="70" rx="10" ry="10" fill="#161b22" stroke="#ab7df8" stroke-width="1.4"/>
+<rect x="1210" y="918" width="34" height="34" rx="8" fill="#ab7df8"/>
+<g transform="translate(1227.0,935.0) scale(1.0)" fill="none" stroke="#ffffff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="0" cy="-7" rx="9" ry="3.5"/><path d="M-9,-7 v14 a9,3.5 0 0 0 18,0 v-14"/><path d="M-9,0 a9,3.5 0 0 0 18,0"/></g>
+<text x="1254" y="933" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="700" fill="#e6edf3" text-anchor="start">PVCs</text>
+<text x="1254" y="950" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">oci-bv · usage</text>
+<rect x="48" y="140" width="250" height="452" rx="12" ry="12" fill="#161b22" stroke="#30363d" stroke-width="1.4"/>
+<text x="66" y="172" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="16.5" font-weight="700" fill="#e6edf3" text-anchor="start">At a glance</text>
+<circle cx="68" cy="186" r="2.8" fill="#4493f8"/>
+<text x="80" y="190" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Runs as a CronJob every 5 min,</text>
+<text x="80" y="204" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">no overlap, backoffLimit 0</text>
+<circle cx="68" cy="220" r="2.8" fill="#4493f8"/>
+<text x="80" y="224" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Cheap deterministic checks first;</text>
+<text x="80" y="238" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">Claude only for unhealthy services</text>
+<circle cx="68" cy="254" r="2.8" fill="#4493f8"/>
+<text x="80" y="258" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Claude investigates live with</text>
+<text x="80" y="272" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">PromQL, LogQL, Tempo, describe,</text>
+<text x="80" y="286" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">events (agentic tool loop)</text>
+<circle cx="68" cy="302" r="2.8" fill="#4493f8"/>
+<text x="80" y="306" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Every mutating command needs a</text>
+<text x="80" y="320" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">human @mention reply in Teams</text>
+<circle cx="68" cy="336" r="2.8" fill="#4493f8"/>
+<text x="80" y="340" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Tier-2 patches are server-side</text>
+<text x="80" y="354" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">dry-run validated before applying</text>
+<circle cx="68" cy="370" r="2.8" fill="#4493f8"/>
+<text x="80" y="374" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Outcomes are stored; next prompt</text>
+<text x="80" y="388" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">prefers fixes that worked</text>
+<circle cx="68" cy="404" r="2.8" fill="#4493f8"/>
+<text x="80" y="408" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Helm-owned drift → a PR to the</text>
+<text x="80" y="422" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">chart values, not a live patch</text>
+<circle cx="68" cy="438" r="2.8" fill="#4493f8"/>
+<text x="80" y="442" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Per-service cooldown stops</text>
+<text x="80" y="456" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">alert storms</text>
+<circle cx="68" cy="472" r="2.8" fill="#4493f8"/>
+<text x="80" y="476" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">The agent has no ingress at all —</text>
+<text x="80" y="490" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">outbound calls only</text>
+<circle cx="68" cy="506" r="2.8" fill="#4493f8"/>
+<text x="80" y="510" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#e6edf3" text-anchor="start">Degrades gracefully: Loki down →</text>
+<text x="80" y="524" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="400" fill="#9198a1" text-anchor="start">kubectl logs fallback</text>
+<rect x="48" y="612" width="250" height="196" rx="12" ry="12" fill="#161b22" stroke="#30363d" stroke-width="1.4"/>
+<text x="66" y="644" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="16.5" font-weight="700" fill="#e6edf3" text-anchor="start">Detection coverage</text>
+<text x="66" y="662" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="start">checks per area</text>
+<text x="66" y="688" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#e6edf3" text-anchor="start">Pods</text>
+<rect x="158" y="678" width="110" height="10" rx="5" ry="5" fill="#21262d" stroke="#21262d" stroke-width="0"/>
+<rect x="158" y="678" width="110.0" height="10" rx="5" ry="5" fill="#4493f8" stroke="#4493f8" stroke-width="0"/>
+<text x="280" y="688" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#9198a1" text-anchor="end">11</text>
+<text x="66" y="712" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#e6edf3" text-anchor="start">Ingress</text>
+<rect x="158" y="702" width="110" height="10" rx="5" ry="5" fill="#21262d" stroke="#21262d" stroke-width="0"/>
+<rect x="158" y="702" width="100.0" height="10" rx="5" ry="5" fill="#ab7df8" stroke="#ab7df8" stroke-width="0"/>
+<text x="280" y="712" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#9198a1" text-anchor="end">10</text>
+<text x="66" y="736" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#e6edf3" text-anchor="start">Services</text>
+<rect x="158" y="726" width="110" height="10" rx="5" ry="5" fill="#21262d" stroke="#21262d" stroke-width="0"/>
+<rect x="158" y="726" width="60.0" height="10" rx="5" ry="5" fill="#3fb950" stroke="#3fb950" stroke-width="0"/>
+<text x="280" y="736" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#9198a1" text-anchor="end">6</text>
+<text x="66" y="760" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#e6edf3" text-anchor="start">Storage</text>
+<rect x="158" y="750" width="110" height="10" rx="5" ry="5" fill="#21262d" stroke="#21262d" stroke-width="0"/>
+<rect x="158" y="750" width="60.0" height="10" rx="5" ry="5" fill="#d29922" stroke="#d29922" stroke-width="0"/>
+<text x="280" y="760" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#9198a1" text-anchor="end">6</text>
+<text x="66" y="784" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#e6edf3" text-anchor="start">Node runtime</text>
+<rect x="158" y="774" width="110" height="10" rx="5" ry="5" fill="#21262d" stroke="#21262d" stroke-width="0"/>
+<rect x="158" y="774" width="10.0" height="10" rx="5" ry="5" fill="#f85149" stroke="#f85149" stroke-width="0"/>
+<text x="280" y="784" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.8" font-weight="600" fill="#9198a1" text-anchor="end">1</text>
+<rect x="48" y="828" width="250" height="192" rx="12" ry="12" fill="#161b22" stroke="#30363d" stroke-width="1.4"/>
+<text x="66" y="860" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="16.5" font-weight="700" fill="#e6edf3" text-anchor="start">Safety model</text>
+<text x="66" y="878" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="start">read wide, write narrow</text>
+<text x="66" y="900" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#3fb950" text-anchor="start">Tier 1 · runs once approved</text>
+<text x="66" y="917" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#9198a1" text-anchor="start">rollout restart · scale · delete pod</text>
+<text x="66" y="942" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#f0883e" text-anchor="start">Tier 2 · dry-run, then apply</text>
+<text x="66" y="959" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#9198a1" text-anchor="start">set image · patch deploy/svc/ingress</text>
+<text x="66" y="984" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#f85149" text-anchor="start">Anything else → not executed</text>
+<text x="66" y="1001" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="11.5" font-weight="400" fill="#9198a1" text-anchor="start">read-only verbs only (get · logs · exec)</text>
+<rect x="1466" y="120" width="414" height="900" rx="12" ry="12" fill="#161b22" stroke="#30363d" stroke-width="1.4"/>
+<text x="1484" y="152" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="16.5" font-weight="700" fill="#e6edf3" text-anchor="start">Abbreviations</text>
+<text x="1484" y="168" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="start">every acronym used in this diagram</text>
+<text x="1490" y="200" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#9198a1" text-anchor="start">PLATFORM</text>
+<rect x="1490" y="213" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="224" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">OCI</text>
+<text x="1594" y="224" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Oracle Cloud Infrastructure</text>
+<rect x="1490" y="236" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="247" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">OKE</text>
+<text x="1594" y="247" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Oracle Kubernetes Engine</text>
+<rect x="1490" y="259" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="270" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">LB</text>
+<text x="1594" y="270" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Load Balancer</text>
+<rect x="1490" y="282" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="293" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">STS</text>
+<text x="1594" y="293" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">StatefulSet</text>
+<rect x="1490" y="305" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="316" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">PVC / PV</text>
+<text x="1594" y="316" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Persistent Volume (Claim)</text>
+<rect x="1490" y="328" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="339" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">oci-bv</text>
+<text x="1594" y="339" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">OCI Block Volume CSI StorageClass</text>
+<text x="1490" y="374" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#9198a1" text-anchor="start">OBSERVABILITY</text>
+<rect x="1490" y="387" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="398" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">OTLP</text>
+<text x="1594" y="398" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">OpenTelemetry Protocol</text>
+<rect x="1490" y="410" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="421" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">PromQL</text>
+<text x="1594" y="421" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Prometheus query language</text>
+<rect x="1490" y="433" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="444" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">LogQL</text>
+<text x="1594" y="444" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Loki query language</text>
+<rect x="1490" y="456" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="467" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">TraceQL</text>
+<text x="1594" y="467" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Tempo query language</text>
+<rect x="1490" y="479" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="490" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">TSDB</text>
+<text x="1594" y="490" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Time-Series Database (Loki index)</text>
+<rect x="1490" y="502" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="513" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">DS</text>
+<text x="1594" y="513" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Grafana data source</text>
+<text x="1490" y="548" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#9198a1" text-anchor="start">AGENT</text>
+<rect x="1490" y="561" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="572" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">RCA</text>
+<text x="1594" y="572" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Root-Cause Analysis</text>
+<rect x="1490" y="584" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="595" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">SA</text>
+<text x="1594" y="595" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">ServiceAccount (RBAC identity)</text>
+<rect x="1490" y="607" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">GitOps</text>
+<text x="1594" y="618" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Fix lands as a PR to chart values</text>
+<rect x="1490" y="630" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="641" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">Tier 1/2</text>
+<text x="1594" y="641" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Remediation blast-radius policy</text>
+<text x="1490" y="676" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#9198a1" text-anchor="start">DOCUMENT</text>
+<rect x="1490" y="689" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="700" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">HLD</text>
+<text x="1594" y="700" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">High-Level Design</text>
+<rect x="1490" y="712" width="3" height="14" rx="1.5" fill="#f0883e"/>
+<text x="1504" y="723" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="13" font-weight="700" fill="#e6edf3" text-anchor="start">FHD</text>
+<text x="1594" y="723" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Full HD — 1920 × 1080 px</text>
+<text x="1490" y="762" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="700" fill="#9198a1" text-anchor="start">FLOW KEY</text>
+<path d="M1500,784 L1556,784" fill="none" stroke="#4493f8" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-blue)"/>
+<text x="1580" y="788" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Ingress — users into the cluster</text>
+<path d="M1500,808 L1556,808" fill="none" stroke="#f0883e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#ah-dk-orange)"/>
+<text x="1580" y="812" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Egress — Claude, Teams, GitHub</text>
+<path d="M1500,832 L1556,832" fill="none" stroke="#3fb950" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="7 6" marker-end="url(#ah-dk-green)"/>
+<text x="1580" y="836" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Supply — image pulls</text>
+<path d="M1500,856 L1556,856" fill="none" stroke="#39c5cf" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-teal)"/>
+<text x="1580" y="860" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Telemetry — OTLP traces</text>
+<path d="M1500,880 L1556,880" fill="none" stroke="#ab7df8" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-purple)"/>
+<text x="1580" y="884" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Remediation — approved commands only</text>
+<path d="M1500,904 L1556,904" fill="none" stroke="#8b949e" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#ah-dk-gray)"/>
+<text x="1580" y="908" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Internal — reads / queries</text>
+<line x1="48" y1="1032" x2="1880" y2="1032" stroke="#30363d" stroke-width="1.2" stroke-linecap="round" opacity="0.9"/>
+<text x="48" y="1052" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#9198a1" text-anchor="start">Loop: K8s API → detect → collect (events, Loki / kubectl logs, Tempo-correlated timeline) → pre-pass hints → Claude (live PromQL / LogQL / TraceQL) → Teams card → @mention approval → policy-checked kubectl → post-check → outcome stored</text>
+<text x="48" y="1070" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12.5" font-weight="400" fill="#6e7681" text-anchor="start">Read cluster-wide, write narrow · nothing mutates without a human · secrets stay in the cluster (claude-agent-secrets) · Helm-owned drift is fixed in Git, not in place</text>
+<rect x="334" y="325" width="220.0" height="30" rx="8" ry="8" fill="#0d1117" stroke="#f85149" stroke-width="1.6"/>
+<circle cx="350" cy="340" r="5" fill="#f85149"/>
+<text x="362" y="345" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#f85149" text-anchor="start">OCI region · us-ashburn-1</text>
+<rect x="372" y="443" width="189.6" height="30" rx="8" ry="8" fill="#0d1117" stroke="#f0883e" stroke-width="1.6"/>
+<circle cx="388" cy="458" r="5" fill="#f0883e"/>
+<text x="400" y="463" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#f0883e" text-anchor="start">OKE cluster · staging</text>
+<rect x="406" y="489" width="303.59999999999997" height="30" rx="8" ry="8" fill="#0d1117" stroke="#4493f8" stroke-width="1.6"/>
+<circle cx="422" cy="504" r="5" fill="#4493f8"/>
+<text x="434" y="509" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#4493f8" text-anchor="start">namespace: monitoring · claude-agent</text>
+<text x="721.5999999999999" y="509" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="start" stroke="#0d1117" stroke-width="5" paint-order="stroke" stroke-linejoin="round">CronJob */5 · concurrencyPolicy Forbid · ServiceAccount claude-agent</text>
+<rect x="406" y="697" width="334.0" height="30" rx="8" ry="8" fill="#0d1117" stroke="#3fb950" stroke-width="1.6"/>
+<circle cx="422" cy="712" r="5" fill="#3fb950"/>
+<text x="434" y="717" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#3fb950" text-anchor="start">namespace: observability · Helm releases</text>
+<rect x="1118.4" y="865" width="265.6" height="30" rx="8" ry="8" fill="#0d1117" stroke="#ab7df8" stroke-width="1.6"/>
+<circle cx="1134.4" cy="880" r="5" fill="#ab7df8"/>
+<text x="1146.4" y="885" font-family="'Inter','Segoe UI','Noto Sans','DejaVu Sans',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#ab7df8" text-anchor="start">monitored namespaces · apps-stg</text></g>
+</svg>

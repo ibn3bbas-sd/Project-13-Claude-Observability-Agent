@@ -354,7 +354,7 @@ jobs:
         run: |
           GRAFANA="http://monitoring-grafana.observability:80"
           AUTH="admin:$(kubectl -n observability get secret monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d)"
-          REPO="example-org/claude-observability-agent"
+          REPO="${{ github.repository }}"
           DASH_PATH="charts/observability/grafana/dashboards"
           DASHBOARDS=(
             detailed-pods-resources

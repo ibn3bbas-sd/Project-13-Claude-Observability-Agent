@@ -49,30 +49,38 @@ The diagram is a theme-aware SVG (light/dark) generated from code — edit and r
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/example-org/claude-observability-agent.git
-cd claude-observability-agent
+git clone https://github.com/ibn3bbas-sd/Project-13-Claude-Observability-Agent.git
+cd Project-13-Claude-Observability-Agent
 
 # 2. Create and activate a virtual environment
-python -m venv .venv
-source .venv/bin/activate       # Windows: .venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate       # Windows (PowerShell): .venv\Scripts\Activate.ps1
 
 # 3. Install dependencies
 pip install -r agent/requirements.txt
 
 # 4. Configure secrets
 cp .env.example .env
-# Edit .env and fill in ANTHROPIC_API_KEY and MS_GRAPH_* values
+# Edit .env: set ANTHROPIC_API_KEY, plus MS_TEAMS_WEBHOOK_URL or all MS_GRAPH_* values
 
-# 5. Export env vars (or use direnv / python-dotenv)
-export $(grep -v '^#' .env | xargs)
+# 5. Load the env vars into your shell
+set -a; source .env; set +a
 
-# 6. Run a single check
+# 6. Point kubectl at your cluster and confirm access
+kubectl config current-context
+kubectl get ns
+
+# 7. Run a single check (RUN_ONCE=true in .env.example)
 cd agent
 python monitor.py
 ```
 
-> **Tip**: Set `RUN_ONCE=true` for one-shot checks. Set `RUN_ONCE=false` with
-> `INTERVAL_SECONDS=300` for a long-running process.
+> **Tip**: `RUN_ONCE=true` runs one check and exits. Set `RUN_ONCE=false` with
+> `INTERVAL_SECONDS=300` for a long-running process, or `TEST_ALERT=true` to send a
+> synthetic Teams card and verify the notification path.
+>
+> Prometheus/Loki are optional locally — run `scripts/open-monitoring.sh` to
+> port-forward them to `localhost:9090` / `localhost:3100`, or leave the URLs empty.
 
 You can also run as a package from the repo root:
 

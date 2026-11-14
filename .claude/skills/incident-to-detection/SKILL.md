@@ -91,8 +91,8 @@ cd ~/src/claude-observability-agent && git pull && kubectl apply -f k8s/rbac.yam
 kubectl auth can-i list storageclasses --as=system:serviceaccount:monitoring:claude-agent
 
 # build+deploy — deploy.yml only builds from main, so merge first
-gh workflow run deploy.yml --repo example-org/claude-observability-agent --ref main
-gh run watch --repo example-org/claude-observability-agent
+gh workflow run deploy.yml --repo ibn3bbas-sd/Project-13-Claude-Observability-Agent --ref main
+gh run watch --repo ibn3bbas-sd/Project-13-Claude-Observability-Agent
 
 # run once now instead of waiting for the */5 cron
 JOB=claude-agent-test-$(date +%s)
